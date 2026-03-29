@@ -507,111 +507,109 @@ function App() {
   }, []);
 
   const initializeProvider = useCallback(async (activeCheck: () => boolean) => {
-      const skipKokoroInit = isPagesStyleBase && shouldSkipKokoroInitOnPages;
-    
-      // ────── FULL GREMLIN OVERRIDE ──────
-      const urlParams = typeof window !== 'undefined' 
-        ? new URLSearchParams(window.location.search) 
-        : new URLSearchParams();
-    
-      const forcedFromUrl = urlParams.get('ttsDevice') || urlParams.get('device');
-      const forceWebGpu = urlParams.get('forceWebGpu') === 'true' 
-        || forcedFromUrl === 'webgpu';
-      const forceWasm = urlParams.get('forceWasm') === 'true' 
-        || forcedFromUrl === 'wasm';
-    
-      const preferredDevice = forceWebGpu ? 'webgpu' 
-                           : forceWasm ? 'wasm' 
-                           : getDevDeviceOverride();   // fallback to your old function
-    
-      const skipAllQualityChecks = forceWebGpu 
-        || urlParams.get('skipQuality') === 'true' 
-        || urlParams.get('skipWebGpuQualityCheck') === 'true';
-    
-      const allowUnstable = forceWebGpu 
-        || urlParams.get('allowUnstable') === 'true';
-    
-      console.log('🚀 GREMLIN TTS INIT OVERRIDE:', { 
-        preferredDevice, 
-        skipAllQualityChecks, 
-        allowUnstable,
-        rawUrlParams: Object.fromEntries(urlParams) 
-      });
-    
-      const selectedProvider = await selectTTSProvider({
-        preferredDevice,                    // this should now be 'webgpu' when you want it
-        allowWebGpuIfUnstable: allowUnstable,
-        skipWebGpuQualityCheck: skipAllQualityChecks,
-    
+    const skipKokoroInit = isPagesStyleBase && shouldSkipKokoroInitOnPages;
+  
+    // ────── FULL GREMLIN OVERRIDE SYSTEM v2 ──────
+    const urlParams = typeof window !== 'undefined' 
+      ? new URLSearchParams(window.location.search) 
+      : new URLSearchParams();
+  
+    const forcedFromUrl = urlParams.get('ttsDevice') || urlParams.get('device');
+    const forceWebGpu = urlParams.get('forceWebGpu') === 'true' || forcedFromUrl === 'webgpu';
+    const forceWasm   = urlParams.get('forceWasm') === 'true'   || forcedFromUrl === 'wasm';
+  
+    // This is the line that was causing the "Cannot find name 'forcedDeviceOverride'" error
+    const preferredDevice: 'webgpu' | 'wasm' | undefined = 
+      forceWebGpu ? 'webgpu' :
+      forceWasm   ? 'wasm'   :
+      getDevDeviceOverride();   // your original function (returns 'webgpu' | 'wasm' | null)
+  
+    const skipAllQualityChecks = forceWebGpu || 
+      urlParams.get('skipQuality') === 'true' || 
+      urlParams.get('skipWebGpuQualityCheck') === 'true';
+  
+    const allowUnstable = forceWebGpu || 
+      urlParams.get('allowUnstable') === 'true';
+  
+    console.log('🚀 GREMLIN TTS INIT OVERRIDE:', { 
+      preferredDevice, 
+      skipAllQualityChecks, 
+      allowUnstable,
+      rawUrlParams: Object.fromEntries(urlParams.entries())
+    });
+  
+    const selectedProvider = await selectTTSProvider({
+      preferredDevice,                    // now correctly typed
+      allowWebGpuIfUnstable: allowUnstable,
+      skipWebGpuQualityCheck: skipAllQualityChecks,
+  
+      skipKokoroInit,
+      skipKokoroInitReason: skipKokoroInit
+        ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally while bundling is being finalized.'
+        : undefined,
+    });
+  
+    const providerName = selectedProvider.providerType;
+  
+    // ────── REST OF YOUR ORIGINAL CODE STARTS HERE ──────
+    const kokoroPackageLoadable = await emitDevKokoroImportCheck();
+  
+    if (activeCheck()) {
+      setTtsInitStatusLine({
+        providerSelected: providerName,
+        runtime: selectedProvider.runtime,
+        dtype: selectedProvider.dtype,
         skipKokoroInit,
-        skipKokoroInitReason: skipKokoroInit
-          ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally while bundling is being finalized.'
-          : undefined,
+        kokoroImportable: kokoroPackageLoadable,
+        fallbackCode: selectedProvider.fallbackError?.code ?? 'none',
       });
-      const providerName = selectedProvider.providerType;
-
-      const kokoroPackageLoadable = await emitDevKokoroImportCheck();
-
+    }
+  
+    if (forceWebGpu && activeCheck()) {
+      setForceWebGpuRetry(false);
+    }
+  
+    if (import.meta.env.DEV) {
+      const fallbackSummary = getFallbackReasonAndHint(selectedProvider.fallbackError);
+      const diagnostics: DevTtsDiagnostics = {
+        kokoroPackageLoadable,
+        webgpuSupported: await checkWebGpuSupport(),
+        deviceMemoryGb: getDeviceMemoryGb(),
+        forcedDeviceOverride: getDevDeviceOverride() ?? 'none',   // safe here
+        selectedProvider: providerName,
+        selectedDtype: selectedProvider.dtype,
+        fallbackCode: selectedProvider.fallbackError?.code,
+        fallbackReason: fallbackSummary.reason,
+        fallbackHint: fallbackSummary.hint,
+      };
+      console.info('[DEV][TTS_INIT_DIAGNOSTICS]', diagnostics);
       if (activeCheck()) {
-        setTtsInitStatusLine({
-          providerSelected: providerName,
-          runtime: selectedProvider.runtime,
-          dtype: selectedProvider.dtype,
-          skipKokoroInit,
-          kokoroImportable: kokoroPackageLoadable,
-          fallbackCode: selectedProvider.fallbackError?.code ?? 'none',
-        });
+        setDevTtsDiagnostics(diagnostics);
       }
-      if (forceWebGpuRetry && activeCheck()) {
-        setForceWebGpuRetry(false);
+    }
+  
+    if (activeCheck()) {
+      setProvider(selectedProvider.provider);
+      setProviderLabel(providerName);
+      setProviderRuntimeMetadata({
+        providerType: selectedProvider.providerType,
+        runtime: selectedProvider.runtime,
+        dtype: selectedProvider.dtype,
+        runtimeReason: selectedProvider.runtimeReason,
+        webGpuAvoidance: selectedProvider.webGpuAvoidance,
+        fallbackToWebSpeech: selectedProvider.fallbackToWebSpeech,
+        fallbackError: selectedProvider.fallbackError,
+      });
+  
+      if (providerName === 'kokoro') {
+        setVoice((currentVoice) => normalizeKokoroVoiceId(currentVoice));
       }
-
-      if (import.meta.env.DEV) {
-        const fallbackSummary = getFallbackReasonAndHint(selectedProvider.fallbackError);
-        const diagnostics: DevTtsDiagnostics = {
-          kokoroPackageLoadable,
-          webgpuSupported: await checkWebGpuSupport(),
-          deviceMemoryGb: getDeviceMemoryGb(),
-          forcedDeviceOverride: forcedDeviceOverride ?? 'none',
-          selectedProvider: providerName,
-          selectedDtype: selectedProvider.dtype,
-          fallbackCode: selectedProvider.fallbackError?.code,
-          fallbackReason: fallbackSummary.reason,
-          fallbackHint: fallbackSummary.hint,
-        };
-
-        console.info('[DEV][TTS_INIT_DIAGNOSTICS]', diagnostics);
-        if (selectedProvider.fallbackError?.code === 'KOKORO_MODULE_RESOLUTION_FAILED') {
-          console.info(
-            '[DEV][TTS_INIT_ACTION] Verify kokoro-js is installed/bundled and dynamic import path works on GitHub Pages base URL.',
-          );
-        }
-
-        if (activeCheck()) {
-          setDevTtsDiagnostics(diagnostics);
-        }
-      }
-
-      if (activeCheck()) {
-        setProvider(selectedProvider.provider);
-        setProviderLabel(providerName);
-        setProviderRuntimeMetadata({
-          providerType: selectedProvider.providerType,
-          runtime: selectedProvider.runtime,
-          dtype: selectedProvider.dtype,
-          runtimeReason: selectedProvider.runtimeReason,
-          webGpuAvoidance: selectedProvider.webGpuAvoidance,
-          fallbackToWebSpeech: selectedProvider.fallbackToWebSpeech,
-          fallbackError: selectedProvider.fallbackError,
-        });
-        if (providerName === 'kokoro') {
-          setVoice((currentVoice) => normalizeKokoroVoiceId(currentVoice));
-        }
-        setShowFallbackBanner(selectedProvider.fallbackToWebSpeech && !selectedProvider.fallbackIntentional);
-        setShowInformationalFallbackBanner(Boolean(selectedProvider.fallbackIntentional));
-        setProviderFallbackError(selectedProvider.fallbackError ?? null);
-      }
-  }, [forceWebGpuRetry, shouldSkipKokoroInitOnPages]);
+  
+      setShowFallbackBanner(selectedProvider.fallbackToWebSpeech && !selectedProvider.fallbackIntentional);
+      setShowInformationalFallbackBanner(Boolean(selectedProvider.fallbackIntentional));
+      setProviderFallbackError(selectedProvider.fallbackError ?? null);
+    }
+  }, [forceWebGpuRetry, shouldSkipKokoroInitOnPages]);   // keep your existing deps or update if needed
 
   useEffect(() => {
     let active = true;

@@ -7,6 +7,7 @@ import { usePlayerController } from './features/player/playerMachine';
 import { selectTTSProvider } from './tts/providerSelector';
 import { setupLocalDebugPerfTelemetry } from './tts/perfTelemetry';
 import type { TTSFallbackError } from './tts/errors';
+import { canImportKokoroModule } from './tts/providers/kokoroProvider';
 import { WebSpeechProvider } from './tts/providers/webSpeechProvider';
 import type { TTSProvider } from './tts/types';
 
@@ -65,6 +66,20 @@ type DevTtsDiagnostics = {
   fallbackCode?: string;
   fallbackReason?: string;
   fallbackHint?: string;
+};
+
+const KOKORO_MODULE_NOT_BUNDLED_HINT = 'Install/add kokoro-js dependency and avoid @vite-ignore for this import.';
+
+const emitDevKokoroImportCheck = async (): Promise<boolean> => {
+  const kokoroPackageLoadable = await canImportKokoroModule();
+  if (!kokoroPackageLoadable) {
+    console.info('[DEV][TTS_IMPORT_CHECK]', {
+      code: 'KOKORO_MODULE_NOT_BUNDLED',
+      hint: KOKORO_MODULE_NOT_BUNDLED_HINT,
+    });
+  }
+
+  return kokoroPackageLoadable;
 };
 
 const getFallbackReasonAndHint = (error?: TTSFallbackError): { reason?: string; hint?: string } => {
@@ -149,13 +164,7 @@ function App() {
       const providerName = resolveProviderLabel(selectedProvider.provider);
 
       if (import.meta.env.DEV) {
-        let kokoroPackageLoadable = false;
-        try {
-          await import('kokoro-js');
-          kokoroPackageLoadable = true;
-        } catch {
-          kokoroPackageLoadable = false;
-        }
+        const kokoroPackageLoadable = await emitDevKokoroImportCheck();
 
         const fallbackSummary = getFallbackReasonAndHint(selectedProvider.fallbackError);
         const diagnostics: DevTtsDiagnostics = {

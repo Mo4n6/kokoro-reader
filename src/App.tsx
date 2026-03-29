@@ -261,6 +261,8 @@ function App() {
     let active = true;
 
     const ensureVoiceAvailable = async () => {
+      let awaitingVoiceReconciliation = false;
+
       if (active) {
         setIsPlaybackReady(false);
       }
@@ -278,18 +280,19 @@ function App() {
           return;
         }
 
-        const isSelectedVoiceAvailable = voices.some((providerVoice) => providerVoice.id === voice);
+        const selectedVoice = voice;
+        const isSelectedVoiceAvailable = voices.some((providerVoice) => providerVoice.id === selectedVoice);
         if (isSelectedVoiceAvailable) {
-          setVoiceFallbackWarning(null);
           return;
         }
 
         const fallbackVoice = providerLabel === 'kokoro'
           ? voices.find((providerVoice) => providerVoice.id === 'af_alloy') ?? voices[0]
           : voices[0];
+        awaitingVoiceReconciliation = true;
         setVoice(fallbackVoice.id);
         setVoiceFallbackWarning(
-          `Selected voice "${voice}" is unavailable for ${providerLabel}; switched to "${fallbackVoice.name}".`,
+          `Selected voice "${selectedVoice}" is unavailable for ${providerLabel}; switched to "${fallbackVoice.name}".`,
         );
       } catch {
         if (active) {
@@ -297,7 +300,7 @@ function App() {
           setVoiceFallbackWarning('Unable to validate voices for the active provider.');
         }
       } finally {
-        if (active) {
+        if (active && !awaitingVoiceReconciliation) {
           setIsPlaybackReady(true);
         }
       }
@@ -308,7 +311,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [provider, providerLabel]);
+  }, [provider, providerLabel, voice]);
 
   useEffect(() => {
     let active = true;

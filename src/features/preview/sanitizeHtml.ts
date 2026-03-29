@@ -1,12 +1,28 @@
 import createDOMPurify from 'dompurify';
-import { JSDOM } from 'jsdom';
-
-const window = new JSDOM('').window;
-const purifier = createDOMPurify(window);
 
 const FORBID_TAGS = ['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta'];
 const FORBID_ATTR = ['style'];
 const ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto|tel|ftp):|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i;
+
+const hasBrowserWindow = typeof globalThis.window !== 'undefined';
+const purifier = hasBrowserWindow ? createDOMPurify(globalThis.window) : null;
+
+function isElementNode(node: unknown): node is Element {
+  if (!node || typeof node !== 'object') {
+    return false;
+  }
+
+  if (typeof globalThis.Element !== 'undefined') {
+    return node instanceof globalThis.Element;
+  }
+
+  return (
+    'nodeType' in node &&
+    'namespaceURI' in node &&
+    'attributes' in node &&
+    typeof (node as { nodeType?: unknown }).nodeType === 'number'
+  );
+}
 
 function scrubSvgXLinkHref(node: Element): void {
   if (node.namespaceURI !== 'http://www.w3.org/2000/svg') {
@@ -24,8 +40,8 @@ function scrubSvgXLinkHref(node: Element): void {
   }
 }
 
-purifier.addHook('afterSanitizeAttributes', (node) => {
-  if (!(node instanceof window.Element)) {
+purifier?.addHook('afterSanitizeAttributes', (node) => {
+  if (!isElementNode(node)) {
     return;
   }
 
@@ -39,6 +55,10 @@ purifier.addHook('afterSanitizeAttributes', (node) => {
 });
 
 export function sanitizeHtml(html: string): string {
+  if (!purifier) {
+    return html;
+  }
+
   return purifier.sanitize(html, {
     FORBID_TAGS,
     FORBID_ATTR,

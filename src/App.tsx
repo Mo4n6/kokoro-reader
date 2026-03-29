@@ -202,7 +202,7 @@ function App() {
   const [providerFallbackError, setProviderFallbackError] = useState<TTSFallbackError | null>(null);
   const [voiceFallbackWarning, setVoiceFallbackWarning] = useState<string | null>(null);
   const [isVoiceReadyForPlayback, setIsVoiceReadyForPlayback] = useState(false);
-  const [voiceReadinessHelperText, setVoiceReadinessHelperText] = useState('Loading voices…');
+  const [voiceReadinessHelperText, setVoiceReadinessHelperText] = useState<string | null>('Loading voices…');
   const [devTtsDiagnostics, setDevTtsDiagnostics] = useState<DevTtsDiagnostics | null>(null);
   const [voice, setVoice] = useState(storedPreferences?.voice ?? 'af_alloy');
   const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>([]);

@@ -1,10 +1,10 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { ttsManifest } from './licenses/ttsManifest';
 import { ingestInput } from './features/ingest/urlAdapter';
 import { PlayerControls } from './features/player/PlayerControls';
 import type { NormalizedDocument, PlaybackMode, SpeakableSegment } from './domain/segments';
 import { usePlayerController } from './features/player/playerMachine';
-import { selectTTSProvider } from './tts/providerSelector';
+import { clearWebGpuUnstableProfileForCurrentBrowser, selectTTSProvider } from './tts/providerSelector';
 import { perfTelemetry, setupLocalDebugPerfTelemetry } from './tts/perfTelemetry';
 import { classifyPerfDebugEvent, type PerfDebugEntry } from './tts/perfDebugClassifier';
 import type { TTSFallbackError } from './tts/errors';
@@ -243,6 +243,7 @@ type ProviderRuntimeMetadata = {
   providerType: 'kokoro' | 'web-speech';
   runtime: 'webgpu' | 'wasm' | 'system';
   dtype: RuntimeDType;
+  runtimeReason?: string;
   fallbackToWebSpeech: boolean;
   fallbackError?: TTSFallbackError;
 };
@@ -377,6 +378,7 @@ function App() {
     providerType: 'web-speech',
     runtime: 'system',
     dtype: 'n/a',
+    runtimeReason: undefined,
     fallbackToWebSpeech: false,
   });
   const [showFallbackBanner, setShowFallbackBanner] = useState(false);
@@ -402,6 +404,8 @@ function App() {
   const [hasPendingVoiceMigrationNormalization, setHasPendingVoiceMigrationNormalization] = useState(
     Boolean(storedPreferences?.migratedLegacyWebSpeechVoice) && !loadVoiceMigrationDone(),
   );
+  const [providerInitNonce, setProviderInitNonce] = useState(0);
+  const [forceWebGpuRetry, setForceWebGpuRetry] = useState(false);
 
   const shouldSuppressNextVoiceMigrationWarning = (
     hasPendingVoiceMigrationNormalization && !hasCompletedVoiceMigration
@@ -496,15 +500,15 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-
-    const initializeProvider = async () => {
+  const initializeProvider = useCallback(async (activeCheck: () => boolean) => {
       const skipKokoroInit = isPagesStyleBase && shouldSkipKokoroInitOnPages;
       const forcedDeviceOverride = getDevDeviceOverride();
+      const shouldForceWebGpuAttempt = forcedDeviceOverride === 'webgpu' || forceWebGpuRetry;
+      const preferredDevice = forcedDeviceOverride ?? (shouldForceWebGpuAttempt ? 'webgpu' : undefined);
       const selectedProvider = await selectTTSProvider({
-        preferredDevice: forcedDeviceOverride ?? undefined,
-        allowWebGpuIfUnstable: forcedDeviceOverride === 'webgpu',
+        preferredDevice,
+        allowWebGpuIfUnstable: shouldForceWebGpuAttempt,
+        skipWebGpuQualityCheck: forceWebGpuRetry,
         skipKokoroInit,
         skipKokoroInitReason: skipKokoroInit
           ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally while bundling is being finalized.'
@@ -514,7 +518,7 @@ function App() {
 
       const kokoroPackageLoadable = await emitDevKokoroImportCheck();
 
-      if (active) {
+      if (activeCheck()) {
         setTtsInitStatusLine({
           providerSelected: providerName,
           runtime: selectedProvider.runtime,
@@ -546,18 +550,22 @@ function App() {
           );
         }
 
-        if (active) {
+        if (activeCheck()) {
           setDevTtsDiagnostics(diagnostics);
         }
       }
 
-      if (active) {
+      if (activeCheck()) {
+        if (forceWebGpuRetry) {
+          setForceWebGpuRetry(false);
+        }
         setProvider(selectedProvider.provider);
         setProviderLabel(providerName);
         setProviderRuntimeMetadata({
           providerType: selectedProvider.providerType,
           runtime: selectedProvider.runtime,
           dtype: selectedProvider.dtype,
+          runtimeReason: selectedProvider.runtimeReason,
           fallbackToWebSpeech: selectedProvider.fallbackToWebSpeech,
           fallbackError: selectedProvider.fallbackError,
         });
@@ -568,14 +576,17 @@ function App() {
         setShowInformationalFallbackBanner(Boolean(selectedProvider.fallbackIntentional));
         setProviderFallbackError(selectedProvider.fallbackError ?? null);
       }
-    };
+  }, [forceWebGpuRetry, shouldSkipKokoroInitOnPages]);
 
-    void initializeProvider();
+  useEffect(() => {
+    let active = true;
+
+    void initializeProvider(() => active);
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [initializeProvider, providerInitNonce]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -852,6 +863,25 @@ function App() {
                 </ul>
               ) : null}
             </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {providerRuntimeMetadata.providerType === 'kokoro' && providerRuntimeMetadata.runtimeReason ? (
+        <div className="mb-4 rounded-md border border-sky-700/80 bg-sky-950/30 px-3 py-2 text-sm text-sky-100">
+          <p>Runtime note: {providerRuntimeMetadata.runtimeReason}</p>
+          {providerRuntimeMetadata.runtimeReason.includes('marked unstable') ? (
+            <button
+              type="button"
+              className="mt-2 rounded-md border border-sky-500 px-2 py-1 text-xs text-sky-100 hover:border-sky-300"
+              onClick={() => {
+                clearWebGpuUnstableProfileForCurrentBrowser();
+                setForceWebGpuRetry(true);
+                setProviderInitNonce((current) => current + 1);
+              }}
+            >
+              Retry WebGPU for this browser profile
+            </button>
           ) : null}
         </div>
       ) : null}

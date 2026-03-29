@@ -1,11 +1,12 @@
 import { DEFAULT_KOKORO_MODEL } from './modelArtifacts';
 import { classifyTTSFailure, TTSFallbackError } from './errors';
 import { perfTelemetry } from './perfTelemetry';
-import { KokoroDevice, KokoroProvider, KokoroProviderOptions } from './providers/kokoroProvider';
+import { canImportKokoroModule, KokoroDevice, KokoroProvider, KokoroProviderOptions } from './providers/kokoroProvider';
 import { WebSpeechProvider } from './providers/webSpeechProvider';
 import { TTSProvider } from './types';
 
 const DEFAULT_MEMORY_GB_THRESHOLD = 4;
+const isPagesStyleBase = (): boolean => import.meta.env.BASE_URL !== '/';
 
 const getDeviceMemoryGb = (): number | undefined => {
   if (typeof navigator === 'undefined') {
@@ -69,6 +70,41 @@ export const selectTTSProvider = async (
   const shouldUseKokoro = memorySufficient && (requestedDevice === 'wasm' || webGpuSupport.adapterAvailable);
 
   if (shouldUseKokoro) {
+    if (isPagesStyleBase()) {
+      const kokoroImportable = await canImportKokoroModule();
+      if (!kokoroImportable) {
+        const fallbackError = classifyTTSFailure(
+          new Error("Failed to resolve module specifier 'kokoro-js' in GitHub Pages mode."),
+          {
+            minimumMemoryGb,
+            availableMemoryGb,
+            requestedDevice,
+            hasNavigatorGpu: webGpuSupport.hasNavigatorGpu,
+            webgpuAdapterAvailable: webGpuSupport.adapterAvailable,
+          },
+        );
+
+        perfTelemetry.sink.log({
+          type: 'tts.degraded_mode',
+          from: 'kokoro',
+          to: 'web-speech',
+          providerFrom: 'kokoro',
+          providerTo: 'web-speech',
+          fallbackCode: fallbackError.code,
+          fallbackMessage: fallbackError.message,
+          fallbackError,
+        });
+        logFallbackRecordForDev(fallbackError);
+
+        return {
+          provider: new WebSpeechProvider(),
+          fallbackToWebSpeech: true,
+          fallbackReason: fallbackError.message,
+          fallbackError,
+        };
+      }
+    }
+
     const kokoroProvider = new KokoroProvider({
       model: options.kokoro?.model ?? DEFAULT_KOKORO_MODEL,
       device: requestedDevice,

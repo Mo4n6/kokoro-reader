@@ -85,6 +85,26 @@ const markWebGpuUnstableForCurrentProfile = (reason: string): void => {
   window.localStorage.setItem(WEBGPU_UNSTABLE_PROFILES_STORAGE_KEY, JSON.stringify(profiles));
 };
 
+export const clearWebGpuUnstableProfileForCurrentBrowser = (): void => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const profileKey = getBrowserGpuProfileKey();
+  const profiles = loadUnstableWebGpuProfiles();
+  if (!profiles[profileKey]) {
+    return;
+  }
+
+  delete profiles[profileKey];
+  if (Object.keys(profiles).length === 0) {
+    window.localStorage.removeItem(WEBGPU_UNSTABLE_PROFILES_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(WEBGPU_UNSTABLE_PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+};
+
 const getDeviceMemoryGb = (): number | undefined => {
   if (typeof navigator === 'undefined') {
     return undefined;

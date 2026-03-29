@@ -1,10 +1,10 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { ttsManifest } from './licenses/ttsManifest';
 import { ingestInput } from './features/ingest/urlAdapter';
 import { PlayerControls } from './features/player/PlayerControls';
 import type { NormalizedDocument, PlaybackMode, SpeakableSegment } from './domain/segments';
 import { usePlayerController } from './features/player/playerMachine';
-import { selectTTSProvider } from './tts/providerSelector';
+import { clearWebGpuUnstableProfileForCurrentBrowser, selectTTSProvider } from './tts/providerSelector';
 import { perfTelemetry, setupLocalDebugPerfTelemetry } from './tts/perfTelemetry';
 import { classifyPerfDebugEvent, type PerfDebugEntry } from './tts/perfDebugClassifier';
 import type { TTSFallbackError } from './tts/errors';
@@ -404,6 +404,7 @@ function App() {
   const [hasPendingVoiceMigrationNormalization, setHasPendingVoiceMigrationNormalization] = useState(
     Boolean(storedPreferences?.migratedLegacyWebSpeechVoice) && !loadVoiceMigrationDone(),
   );
+  const [providerInitNonce, setProviderInitNonce] = useState(0);
 
   const shouldSuppressNextVoiceMigrationWarning = (
     hasPendingVoiceMigrationNormalization && !hasCompletedVoiceMigration
@@ -498,10 +499,7 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-
-    const initializeProvider = async () => {
+  const initializeProvider = useCallback(async (activeCheck: () => boolean) => {
       const skipKokoroInit = isPagesStyleBase && shouldSkipKokoroInitOnPages;
       const forcedDeviceOverride = getDevDeviceOverride();
       const selectedProvider = await selectTTSProvider({
@@ -516,7 +514,7 @@ function App() {
 
       const kokoroPackageLoadable = await emitDevKokoroImportCheck();
 
-      if (active) {
+      if (activeCheck()) {
         setTtsInitStatusLine({
           providerSelected: providerName,
           runtime: selectedProvider.runtime,
@@ -548,12 +546,12 @@ function App() {
           );
         }
 
-        if (active) {
+        if (activeCheck()) {
           setDevTtsDiagnostics(diagnostics);
         }
       }
 
-      if (active) {
+      if (activeCheck()) {
         setProvider(selectedProvider.provider);
         setProviderLabel(providerName);
         setProviderRuntimeMetadata({
@@ -571,13 +569,21 @@ function App() {
         setShowInformationalFallbackBanner(Boolean(selectedProvider.fallbackIntentional));
         setProviderFallbackError(selectedProvider.fallbackError ?? null);
       }
-    };
+  }, [shouldSkipKokoroInitOnPages]);
 
-    void initializeProvider();
+  useEffect(() => {
+    let active = true;
+
+    void initializeProvider(() => active);
 
     return () => {
       active = false;
     };
+  }, [initializeProvider, providerInitNonce]);
+
+  const retryWebGpuForCurrentProfile = useCallback(() => {
+    clearWebGpuUnstableProfileForCurrentBrowser();
+    setProviderInitNonce((current) => current + 1);
   }, []);
 
   useEffect(() => {

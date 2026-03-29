@@ -581,6 +581,11 @@ function App() {
     };
   }, [initializeProvider, providerInitNonce]);
 
+  const retryWebGpuForCurrentProfile = useCallback(() => {
+    clearWebGpuUnstableProfileForCurrentBrowser();
+    setProviderInitNonce((current) => current + 1);
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -862,19 +867,7 @@ function App() {
 
       {providerRuntimeMetadata.providerType === 'kokoro' && providerRuntimeMetadata.runtimeReason ? (
         <div className="mb-4 rounded-md border border-sky-700/80 bg-sky-950/30 px-3 py-2 text-sm text-sky-100">
-          <p>Runtime note: {providerRuntimeMetadata.runtimeReason}</p>
-          {providerRuntimeMetadata.runtimeReason.includes('marked unstable') ? (
-            <button
-              type="button"
-              className="mt-2 rounded-md border border-sky-500 px-2 py-1 text-xs text-sky-100 hover:border-sky-300"
-              onClick={() => {
-                clearWebGpuUnstableProfileForCurrentBrowser();
-                setProviderInitNonce((current) => current + 1);
-              }}
-            >
-              Retry WebGPU for this browser profile
-            </button>
-          ) : null}
+          Runtime note: {providerRuntimeMetadata.runtimeReason}
         </div>
       ) : null}
 

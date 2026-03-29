@@ -19,6 +19,9 @@ const sourceTabs: SourceType[] = isUrlIngestEnabled ? ['text', 'file', 'url'] : 
 const TTS_PREFS_STORAGE_KEY = 'reader-tts-preferences';
 
 const LEGACY_VOICE_MIGRATIONS: Record<string, string> = {
+  Alloy: 'af_alloy',
+  Verse: 'af_verse',
+  Lumen: 'af_lumen',
   alloy: 'af_alloy',
   verse: 'af_verse',
   lumen: 'af_lumen',
@@ -605,7 +608,7 @@ function App() {
               segmentCount={ingested.document.segments.length}
               machineError={player.error}
               voice={voice}
-              voices={availableVoices}
+              voices={availableVoices.map(({ id, name }) => ({ id, name }))}
               rate={rate}
               isVoiceReadyForPlayback={isVoiceReadyForPlayback}
               voiceReadinessHelperText={voiceReadinessHelperText}

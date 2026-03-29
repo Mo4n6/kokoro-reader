@@ -126,6 +126,7 @@ export interface TTSProviderSelection {
   providerType: 'kokoro' | 'web-speech';
   runtime: 'webgpu' | 'wasm' | 'system';
   dtype: RuntimeDType;
+  runtimeReason?: string;
   fallbackToWebSpeech: boolean;
   fallbackIntentional?: boolean;
   fallbackReason?: string;
@@ -206,6 +207,13 @@ export const selectTTSProvider = async (
     options.preferredDevice
     ?? options.kokoro?.device
     ?? (webGpuSupport.adapterAvailable && !shouldAvoidWebGpuForProfile ? 'webgpu' : 'wasm');
+  const runtimeReason = requestedDevice === 'wasm'
+    ? (shouldAvoidWebGpuForProfile
+      ? 'WebGPU was previously marked unstable in this browser profile, so Kokoro was started in CPU mode.'
+      : (!webGpuSupport.adapterAvailable
+        ? 'WebGPU adapter is unavailable on this device/browser, so Kokoro is using CPU mode.'
+        : undefined))
+    : undefined;
   const availableMemoryGb = getDeviceMemoryGb();
   const memorySufficient = hasEnoughMemory(minimumMemoryGb);
 
@@ -303,6 +311,7 @@ export const selectTTSProvider = async (
         providerType: 'kokoro',
         runtime: runtimeDevice,
         dtype: selectedDtype,
+        runtimeReason,
         fallbackToWebSpeech: false,
       };
     } catch (error) {

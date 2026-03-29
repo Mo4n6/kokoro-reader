@@ -10,28 +10,32 @@ export interface KokoroProviderOptions {
 }
 
 type KokoroModule = {
-  createKokoroTTS: (options: { model: string; device: KokoroDevice }) => Promise<KokoroEngine>;
+  KokoroTTS: {
+    from_pretrained: (
+      modelId: string,
+      options: { dtype?: 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16'; device?: KokoroDevice | 'cpu' | null }
+    ) => Promise<KokoroRuntimeEngine>;
+  };
 };
 
-type KokoroEngine = {
-  listVoices: () => Promise<Array<{ id: string; name: string; language?: string }>>;
-  synthesize: (
+type KokoroRuntimeEngine = {
+  voices?: Record<string, { name: string; language?: string }>;
+  generate: (
     text: string,
     options: {
       voice?: string;
       speed?: number;
-      pitch?: number;
-      format?: string;
     }
-  ) => Promise<Blob | ArrayBuffer | Uint8Array>;
+  ) => Promise<{ toWav: () => Blob } | Blob | ArrayBuffer | Uint8Array>;
+};
+
+type KokoroEngine = {
+  listVoices: () => Promise<Array<{ id: string; name: string; language?: string }>>;
+  synthesize: (text: string, options: { voice?: string; speed?: number }) => Promise<Blob | ArrayBuffer | Uint8Array>;
 };
 
 const importKokoroModule = async (): Promise<KokoroModule> => {
-  const dynamicImport = new Function('modulePath', 'return import(modulePath);') as (
-    modulePath: string
-  ) => Promise<unknown>;
-
-  const module = await dynamicImport('kokoro-js');
+  const module = await import('kokoro-js');
   return module as KokoroModule;
 };
 
@@ -90,8 +94,6 @@ export class KokoroProvider implements TTSProvider {
     const output = await engine.synthesize(segment.text, {
       voice: options.voice,
       speed: options.rate,
-      pitch: options.pitch,
-      format: options.format,
     });
 
     const blob = toAudioBlob(output);
@@ -114,10 +116,30 @@ export class KokoroProvider implements TTSProvider {
   private async loadKokoroEngine(): Promise<KokoroEngine> {
     const startedAt = perfTelemetry.now();
     const kokoroModule = await importKokoroModule();
-    const engine = await kokoroModule.createKokoroTTS({
-      model: this.model,
+    const runtimeEngine = await kokoroModule.KokoroTTS.from_pretrained(this.model, {
+      dtype: 'q8',
       device: this.device,
     });
+    const engine: KokoroEngine = {
+      listVoices: async () =>
+        Object.entries(runtimeEngine.voices ?? {}).map(([id, voice]) => ({
+          id,
+          name: voice.name ?? id,
+          language: voice.language,
+        })),
+      synthesize: async (text, options) => {
+        const audio = await runtimeEngine.generate(text, {
+          voice: options.voice,
+          speed: options.speed,
+        });
+
+        if (audio instanceof Blob || audio instanceof ArrayBuffer || audio instanceof Uint8Array) {
+          return audio;
+        }
+
+        return audio.toWav();
+      },
+    };
     const durationMs = Math.round(perfTelemetry.now() - startedAt);
     const deviceMemoryGb = typeof navigator !== 'undefined'
       ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory

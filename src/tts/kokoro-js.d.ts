@@ -1,27 +1,30 @@
 declare module 'kokoro-js' {
-  export interface KokoroCreateOptions {
-    model: string;
-    device: 'wasm' | 'webgpu';
+  export interface KokoroLoadOptions {
+    dtype?: 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16';
+    device?: 'wasm' | 'webgpu' | 'cpu' | null;
   }
 
   export interface KokoroVoice {
-    id: string;
     name: string;
     language?: string;
   }
 
-  export interface KokoroEngine {
-    listVoices(): Promise<KokoroVoice[]>;
-    synthesize(
+  export interface KokoroRawAudio {
+    toWav(): Blob;
+  }
+
+  export interface KokoroTTSInstance {
+    voices?: Record<string, KokoroVoice>;
+    generate(
       text: string,
       options: {
         voice?: string;
         speed?: number;
-        pitch?: number;
-        format?: string;
       }
-    ): Promise<Blob | ArrayBuffer | Uint8Array>;
+    ): Promise<KokoroRawAudio | Blob | ArrayBuffer | Uint8Array>;
   }
 
-  export function createKokoroTTS(options: KokoroCreateOptions): Promise<KokoroEngine>;
+  export class KokoroTTS {
+    static from_pretrained(modelId: string, options?: KokoroLoadOptions): Promise<KokoroTTSInstance>;
+  }
 }

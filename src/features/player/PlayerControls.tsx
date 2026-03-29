@@ -7,7 +7,9 @@ type PlayerControlsProps = {
   segmentCount: number;
   machineError: string | null;
   voice: string;
-  voices: Array<{ id: string; name: string }>;
+  voices: Array<{ id: string; name: string; language?: string; provider: string }>;
+  selectedLanguage: string;
+  languageOptions: Array<{ value: string; label: string }>;
   rate: number;
   isVoiceReadyForPlayback?: boolean;
   voiceReadinessHelperText?: string | null;
@@ -18,6 +20,7 @@ type PlayerControlsProps = {
   onNextSegment: () => void;
   onSeekSegmentStart: () => void;
   onVoiceChange: (voice: string) => void;
+  onLanguageChange: (language: string) => void;
   onRateChange: (rate: number) => void;
 };
 
@@ -41,6 +44,8 @@ export function PlayerControls({
   machineError,
   voice,
   voices,
+  selectedLanguage,
+  languageOptions,
   rate,
   isVoiceReadyForPlayback = true,
   voiceReadinessHelperText = null,
@@ -51,6 +56,7 @@ export function PlayerControls({
   onNextSegment,
   onSeekSegmentStart,
   onVoiceChange,
+  onLanguageChange,
   onRateChange,
 }: PlayerControlsProps) {
   const [liveMessage, setLiveMessage] = useState('Playback idle.');
@@ -128,6 +134,22 @@ export function PlayerControls({
       <label className="block text-sm text-slate-300" htmlFor="voice-picker">
         Voice selector
       </label>
+      <label className="block text-sm text-slate-300" htmlFor="language-picker">
+        Language selector
+      </label>
+      <select
+        id="language-picker"
+        aria-label="Language selector"
+        className="w-full rounded-md border border-border bg-slate-900 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        value={selectedLanguage}
+        onChange={(event) => onLanguageChange(event.target.value)}
+      >
+        {languageOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
       <select
         id="voice-picker"
         aria-label="Voice selector"
@@ -141,7 +163,7 @@ export function PlayerControls({
         ) : (
           voices.map((providerVoice) => (
             <option key={providerVoice.id} value={providerVoice.id}>
-              {providerVoice.name}
+              {providerVoice.name} ({providerVoice.language ?? 'und'}) [{providerVoice.provider}]
             </option>
           ))
         )}

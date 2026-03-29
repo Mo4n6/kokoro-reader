@@ -76,6 +76,50 @@ const getDefaultKokoroVoice = (voices: TTSVoice[]): TTSVoice | undefined => (
   voices.find((providerVoice) => providerVoice.id === 'af_alloy') ?? voices[0]
 );
 
+const normalizeLanguageTag = (language?: string): string => (
+  (language ?? '').trim().toLowerCase()
+);
+
+const getLanguageRoot = (language?: string): string => {
+  const normalized = normalizeLanguageTag(language);
+  return normalized.split(/[-_]/)[0] ?? '';
+};
+
+const isVoiceLanguageMatch = (voiceLanguage: string | undefined, targetLanguage: string): boolean => {
+  const normalizedTarget = normalizeLanguageTag(targetLanguage);
+  if (!normalizedTarget) {
+    return false;
+  }
+
+  const normalizedVoiceLanguage = normalizeLanguageTag(voiceLanguage);
+  if (!normalizedVoiceLanguage) {
+    return false;
+  }
+
+  return (
+    normalizedVoiceLanguage === normalizedTarget
+    || getLanguageRoot(normalizedVoiceLanguage) === getLanguageRoot(normalizedTarget)
+  );
+};
+
+const getEnglishVoices = (voices: TTSVoice[]): TTSVoice[] => voices.filter((providerVoice) => (
+  isVoiceLanguageMatch(providerVoice.language, 'en')
+));
+
+const getPreferredVoicesForLanguage = (voices: TTSVoice[], language: string): TTSVoice[] => {
+  const languageMatches = voices.filter((providerVoice) => isVoiceLanguageMatch(providerVoice.language, language));
+  if (languageMatches.length > 0) {
+    return languageMatches;
+  }
+
+  const englishVoices = getEnglishVoices(voices);
+  if (englishVoices.length > 0) {
+    return englishVoices;
+  }
+
+  return voices;
+};
+
 const getWebSpeechVoiceIds = (): string[] => {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return [];
@@ -288,6 +332,7 @@ function App() {
   const [showDetails, setShowDetails] = useState(!isProduction);
   const [voice, setVoice] = useState(storedPreferences?.voice ?? '');
   const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>([]);
+  const [selectedVoiceLanguage, setSelectedVoiceLanguage] = useState('auto');
   const [rate, setRate] = useState(storedPreferences?.rate ?? 1);
   const [showModelLicenseInfo, setShowModelLicenseInfo] = useState(true);
   const [hasCompletedVoiceMigration, setHasCompletedVoiceMigration] = useState(loadVoiceMigrationDone);
@@ -303,6 +348,45 @@ function App() {
     () => ingested.document.segments.map((segment) => ({ id: segment.id, text: segment.text })),
     [ingested.document.segments],
   );
+  const detectedDocumentLanguage = useMemo(() => {
+    const directLanguage = normalizeLanguageTag(ingested.document.language);
+    if (directLanguage) {
+      return directLanguage;
+    }
+
+    for (const segment of ingested.document.segments) {
+      const metaLanguage = typeof segment.meta?.language === 'string' ? normalizeLanguageTag(segment.meta.language) : '';
+      if (metaLanguage) {
+        return metaLanguage;
+      }
+    }
+
+    return 'en';
+  }, [ingested.document.language, ingested.document.segments]);
+  const effectiveVoiceLanguage = selectedVoiceLanguage === 'auto'
+    ? detectedDocumentLanguage
+    : selectedVoiceLanguage;
+  const languageOptions = useMemo(() => {
+    const languageValues = new Set<string>(['auto']);
+    if (detectedDocumentLanguage) {
+      languageValues.add(detectedDocumentLanguage);
+    }
+    availableVoices.forEach((providerVoice) => {
+      const language = normalizeLanguageTag(providerVoice.language);
+      if (language) {
+        languageValues.add(language);
+      }
+    });
+
+    return Array.from(languageValues).map((value) => (
+      value === 'auto'
+        ? { value, label: `Auto (${detectedDocumentLanguage || 'en'})` }
+        : { value, label: value }
+    ));
+  }, [availableVoices, detectedDocumentLanguage]);
+  const filteredVoices = useMemo(() => (
+    getPreferredVoicesForLanguage(availableVoices, effectiveVoiceLanguage)
+  ), [availableVoices, effectiveVoiceLanguage]);
 
   const player = usePlayerController({
     provider,
@@ -447,7 +531,8 @@ function App() {
         const normalizedSelectedVoice = providerLabel === 'kokoro'
           ? normalizeKokoroVoiceId(selectedVoice)
           : selectedVoice;
-        const isSelectedVoiceAvailable = voices.some((providerVoice) => providerVoice.id === normalizedSelectedVoice);
+        const preferredVoices = getPreferredVoicesForLanguage(voices, effectiveVoiceLanguage);
+        const isSelectedVoiceAvailable = preferredVoices.some((providerVoice) => providerVoice.id === normalizedSelectedVoice);
         if (isSelectedVoiceAvailable) {
           if (normalizedSelectedVoice !== selectedVoice) {
             setVoice(normalizedSelectedVoice);
@@ -459,8 +544,8 @@ function App() {
         }
 
         const fallbackVoice = providerLabel === 'kokoro'
-          ? getDefaultKokoroVoice(voices) ?? voices[0]
-          : voices[0];
+          ? getDefaultKokoroVoice(preferredVoices) ?? preferredVoices[0]
+          : preferredVoices[0];
         setVoiceReadinessHelperText('Select a valid voice.');
         setVoice(fallbackVoice.id);
         if (typeof window !== 'undefined') {
@@ -502,7 +587,14 @@ function App() {
     return () => {
       active = false;
     };
-  }, [hasCompletedVoiceMigration, hasPendingVoiceMigrationNormalization, provider, providerLabel, voice]);
+  }, [
+    effectiveVoiceLanguage,
+    hasCompletedVoiceMigration,
+    hasPendingVoiceMigrationNormalization,
+    provider,
+    providerLabel,
+    voice,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -858,7 +950,9 @@ function App() {
               segmentCount={ingested.document.segments.length}
               machineError={player.error}
               voice={voice}
-              voices={availableVoices.map(({ id, name }) => ({ id, name }))}
+              voices={filteredVoices}
+              selectedLanguage={selectedVoiceLanguage}
+              languageOptions={languageOptions}
               rate={rate}
               isVoiceReadyForPlayback={isVoiceReadyForPlayback}
               voiceReadinessHelperText={voiceReadinessHelperText}
@@ -889,6 +983,7 @@ function App() {
                 void player.seekSegment(player.currentSegmentIndex, 0);
               }}
               onVoiceChange={setVoice}
+              onLanguageChange={setSelectedVoiceLanguage}
               onRateChange={setRate}
             />
             <button

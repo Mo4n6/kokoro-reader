@@ -975,16 +975,16 @@ function App() {
 
 
       {showModelLicenseInfo ? (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-slate-950/80 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-border bg-panel p-5 shadow-2xl">
+        <div className="fixed inset-0 z-20 flex items-center justify-center bg-[#050706]/85 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-emerald-500/35 bg-[#07110a] p-5 shadow-2xl shadow-black/40">
             <div className="mb-3 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold">Model &amp; License Info</h2>
-                <p className="mt-1 text-sm text-slate-300">Loaded from <code>docs/licenses/tts-manifest.json</code>.</p>
+                <h2 className="text-xl font-semibold text-emerald-100">Model &amp; License Info</h2>
+                <p className="mt-1 text-sm text-emerald-300/80">Loaded from <code>docs/licenses/tts-manifest.json</code>.</p>
               </div>
               <button
                 type="button"
-                className="rounded-md border border-border px-3 py-1 text-sm text-slate-200"
+                className="rounded-md border border-emerald-500/35 bg-[#0a160f] px-3 py-1 text-sm text-emerald-100 hover:border-emerald-400/60"
                 onClick={() => setShowModelLicenseInfo(false)}
               >
                 Close
@@ -992,18 +992,18 @@ function App() {
             </div>
             <div className="space-y-3">
               {ttsManifest.artifacts.map((artifact) => (
-                <article key={artifact.id} className="rounded-md border border-border bg-slate-900/70 p-3 text-sm">
-                  <p><span className="font-semibold">Package/model:</span> {artifact.packageOrModelName}</p>
-                  <p><span className="font-semibold">Version/hash:</span> {artifact.versionOrHash}</p>
-                  <p><span className="font-semibold">License:</span> {artifact.license}</p>
+                <article key={artifact.id} className="rounded-md border border-emerald-500/30 bg-[#0a160f] p-3 text-sm text-emerald-100">
+                  <p><span className="font-semibold text-emerald-200">Package/model:</span> {artifact.packageOrModelName}</p>
+                  <p><span className="font-semibold text-emerald-200">Version/hash:</span> {artifact.versionOrHash}</p>
+                  <p><span className="font-semibold text-emerald-200">License:</span> {artifact.license}</p>
                   <p>
-                    <span className="font-semibold">Source URL:</span>{' '}
-                    <a className="text-sky-300 underline" href={artifact.sourceUrl} rel="noreferrer" target="_blank">
+                    <span className="font-semibold text-emerald-200">Source URL:</span>{' '}
+                    <a className="text-emerald-300 underline hover:text-emerald-200" href={artifact.sourceUrl} rel="noreferrer" target="_blank">
                       {artifact.sourceUrl}
                     </a>
                   </p>
                   {artifact.attributionText ? (
-                    <p><span className="font-semibold">Attribution:</span> {artifact.attributionText}</p>
+                    <p><span className="font-semibold text-emerald-200">Attribution:</span> {artifact.attributionText}</p>
                   ) : null}
                 </article>
               ))}

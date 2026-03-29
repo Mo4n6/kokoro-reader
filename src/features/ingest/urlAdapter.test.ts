@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ingestUrl, UrlIngestError } from './urlAdapter';
+import { ingestUrl } from './urlAdapter';
 
 function asJsonResponse(payload: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(payload), {
@@ -13,16 +13,39 @@ function asJsonResponse(payload: unknown, init?: ResponseInit): Response {
 describe('ingestUrl', () => {
   const originalFetch = globalThis.fetch;
   const originalDomParser = globalThis.DOMParser;
+  const originalWindow = globalThis.window;
+  const originalElement = globalThis.Element;
+  let jsdom: JSDOM | null = null;
 
   beforeAll(() => {
+    jsdom = new JSDOM('');
+
+    if (!globalThis.window) {
+      Object.assign(globalThis, { window: jsdom.window });
+    }
+    if (!globalThis.Element) {
+      Object.assign(globalThis, { Element: jsdom.window.Element });
+    }
+
     if (!globalThis.DOMParser) {
-      globalThis.DOMParser = new JSDOM('').window.DOMParser;
+      globalThis.DOMParser = jsdom.window.DOMParser;
     }
   });
 
   afterAll(() => {
     globalThis.fetch = originalFetch;
     globalThis.DOMParser = originalDomParser;
+    if (originalWindow) {
+      Object.assign(globalThis, { window: originalWindow });
+    } else {
+      Reflect.deleteProperty(globalThis, 'window');
+    }
+    if (originalElement) {
+      Object.assign(globalThis, { Element: originalElement });
+    } else {
+      Reflect.deleteProperty(globalThis, 'Element');
+    }
+    jsdom?.window.close();
     vi.restoreAllMocks();
   });
 
@@ -51,7 +74,7 @@ describe('ingestUrl', () => {
       asJsonResponse({ message: 'missing' }, { status: 404 }),
     ) as typeof fetch;
 
-    await expect(ingestUrl('https://example.com/missing')).rejects.toMatchObject<UrlIngestError>({
+    await expect(ingestUrl('https://example.com/missing')).rejects.toMatchObject({
       code: 'URL_EXTRACT_UNAVAILABLE',
     });
   });
@@ -61,7 +84,7 @@ describe('ingestUrl', () => {
       asJsonResponse({ message: 'bad request' }, { status: 422 }),
     ) as typeof fetch;
 
-    await expect(ingestUrl('https://example.com/blocked')).rejects.toMatchObject<UrlIngestError>({
+    await expect(ingestUrl('https://example.com/blocked')).rejects.toMatchObject({
       code: 'URL_EXTRACT_FAILED',
     });
   });
@@ -69,7 +92,7 @@ describe('ingestUrl', () => {
   it('maps fetch failures to URL_EXTRACT_UNAVAILABLE', async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('network down')) as typeof fetch;
 
-    await expect(ingestUrl('https://example.com/offline')).rejects.toMatchObject<UrlIngestError>({
+    await expect(ingestUrl('https://example.com/offline')).rejects.toMatchObject({
       code: 'URL_EXTRACT_UNAVAILABLE',
     });
   });

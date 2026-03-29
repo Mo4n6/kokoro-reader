@@ -45,14 +45,31 @@ purifier?.addHook('afterSanitizeAttributes', (node) => {
     return;
   }
 
-  for (const attr of Array.from(node.attributes)) {
-    if (/^on/i.test(attr.name)) {
-      node.removeAttribute(attr.name);
-    }
+  if (typeof globalThis.window === 'undefined') {
+    return null;
   }
 
-  scrubSvgXLinkHref(node);
-});
+  purifier = createDOMPurify(globalThis.window);
+
+  if (!hooksRegistered) {
+    purifier.addHook('afterSanitizeAttributes', (node) => {
+      if (!isElementNode(node)) {
+        return;
+      }
+
+      for (const attr of Array.from(node.attributes)) {
+        if (/^on/i.test(attr.name)) {
+          node.removeAttribute(attr.name);
+        }
+      }
+
+      scrubSvgXLinkHref(node);
+    });
+    hooksRegistered = true;
+  }
+
+  return purifier;
+}
 
 export function sanitizeHtml(html: string): string {
   if (!purifier) {

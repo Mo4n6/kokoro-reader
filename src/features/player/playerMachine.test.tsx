@@ -80,7 +80,8 @@ describe('usePlayerController transitions', () => {
 
   it('transitions through play, pause, skip, and error states', async () => {
     const provider: TTSProvider = {
-      id: 'mock-provider',
+      listVoices: vi.fn(async () => []),
+      warmup: vi.fn(async () => undefined),
       synthesize: vi.fn(async ({ id }) => {
         if (id === 'seg-2') {
           throw new Error('boom synthesis');
@@ -91,12 +92,15 @@ describe('usePlayerController transitions', () => {
           url: `blob:${id}`,
         };
       }),
-      stop: vi.fn(),
-      unload: vi.fn(),
-      supportsVoice: vi.fn(() => true),
     };
 
     let controller: UsePlayerControllerResult | null = null;
+    const getController = (): UsePlayerControllerResult => {
+      if (!controller) {
+        throw new Error('Controller was not initialized');
+      }
+      return controller;
+    };
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -105,25 +109,25 @@ describe('usePlayerController transitions', () => {
       root.render(<HookHarness provider={provider} onController={(value) => { controller = value; }} />);
     });
 
-    expect(controller?.state).toBe('idle');
+    expect(getController().state).toBe('idle');
 
     await act(async () => {
-      await controller?.play();
+      await getController().play();
     });
-    expect(controller?.state).toBe('playing');
-    expect(controller?.currentSegmentIndex).toBe(0);
+    expect(getController().state).toBe('playing');
+    expect(getController().currentSegmentIndex).toBe(0);
 
     act(() => {
-      controller?.pause();
+      getController().pause();
     });
-    expect(controller?.state).toBe('paused');
+    expect(getController().state).toBe('paused');
 
     await act(async () => {
-      await controller?.skipNext();
+      await getController().skipNext();
     });
 
-    expect(controller?.state).toBe('error');
-    expect(controller?.error).toContain('boom synthesis');
-    expect(controller?.currentSegmentIndex).toBe(1);
+    expect(getController().state).toBe('error');
+    expect(getController().error).toContain('boom synthesis');
+    expect(getController().currentSegmentIndex).toBe(1);
   });
 });

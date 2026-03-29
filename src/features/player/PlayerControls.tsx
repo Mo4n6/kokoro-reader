@@ -136,16 +136,16 @@ export function PlayerControls({
         {liveMessage}
       </p>
 
-      <label className="block text-sm text-slate-300" htmlFor="voice-picker">
+      <label className="block text-sm text-emerald-200/90" htmlFor="voice-picker">
         Voice selector
       </label>
-      <label className="block text-sm text-slate-300" htmlFor="language-picker">
+      <label className="block text-sm text-emerald-200/90" htmlFor="language-picker">
         Language selector
       </label>
       <select
         id="language-picker"
         aria-label="Language selector"
-        className="w-full rounded-md border border-border bg-slate-900 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="w-full rounded-md border border-emerald-500/30 bg-[#091229] p-2 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         value={selectedLanguage}
         onChange={(event) => onLanguageChange(event.target.value)}
       >
@@ -158,7 +158,7 @@ export function PlayerControls({
       <select
         id="voice-picker"
         aria-label="Voice selector"
-        className="w-full rounded-md border border-border bg-slate-900 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="w-full rounded-md border border-emerald-500/30 bg-[#091229] p-2 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         value={voice}
         disabled={voices.length === 0}
         onChange={(event) => onVoiceChange(event.target.value)}
@@ -174,8 +174,8 @@ export function PlayerControls({
         )}
       </select>
       {import.meta.env.DEV ? (
-        <p className="text-xs text-slate-400" aria-live="polite">
-          Selected voice.id: <span className="font-mono text-slate-200">{voice}</span>
+        <p className="text-xs text-emerald-300/70" aria-live="polite">
+          Selected voice.id: <span className="font-mono text-emerald-100">{voice}</span>
         </p>
       ) : null}
       {!isVoiceReadyForPlayback && voiceReadinessHelperText ? (
@@ -184,13 +184,13 @@ export function PlayerControls({
         </p>
       ) : null}
 
-      <label className="block text-sm text-slate-300" htmlFor="rate-control">
+      <label className="block text-sm text-emerald-200/90" htmlFor="rate-control">
         Rate control: {rate.toFixed(1)}x
       </label>
       <input
         id="rate-control"
         aria-label="Rate control"
-        className="w-full accent-sky-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="w-full accent-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         type="range"
         min={RATE_MIN}
         max={RATE_MAX}
@@ -199,13 +199,13 @@ export function PlayerControls({
         onChange={(event) => onRateChange(Number(event.target.value))}
       />
 
-      <label className="block text-sm text-slate-300" htmlFor="playback-mode-control">
+      <label className="block text-sm text-emerald-200/90" htmlFor="playback-mode-control">
         Playback mode
       </label>
       <select
         id="playback-mode-control"
         aria-label="Playback mode"
-        className="w-full rounded-md border border-border bg-slate-900 p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="w-full rounded-md border border-emerald-500/30 bg-[#091229] p-2 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         value={playbackMode}
         onChange={(event) => onPlaybackModeChange(event.target.value as PlaybackMode)}
       >
@@ -214,7 +214,7 @@ export function PlayerControls({
       </select>
 
       <div
-        className="rounded-md border border-border bg-slate-900 p-3 text-sm"
+        className="rounded-md border border-emerald-500/30 bg-[#091229] p-3 text-sm"
         aria-live="polite"
         aria-label={`Progress indicator, segment ${progressText}`}
       >
@@ -227,7 +227,7 @@ export function PlayerControls({
       <div className="grid grid-cols-3 gap-2">
         <button
           aria-label="Skip to previous segment"
-          className="rounded-md border border-border px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          className="rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           onClick={onPrevSegment}
           type="button"
         >
@@ -235,7 +235,7 @@ export function PlayerControls({
         </button>
         <button
           aria-label={isPlaying ? 'Pause playback' : 'Play playback'}
-          className="rounded-md border border-sky-500 bg-sky-900/60 px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          className="rounded-md border border-emerald-400 bg-emerald-500/15 px-2 py-1 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           disabled={!isPlaying && !canPlay}
           onClick={() => {
             if (isPlaying) {
@@ -253,7 +253,7 @@ export function PlayerControls({
         </button>
         <button
           aria-label="Skip to next segment"
-          className="rounded-md border border-border px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          className="rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           onClick={onNextSegment}
           type="button"
         >
@@ -263,7 +263,7 @@ export function PlayerControls({
 
       <button
         aria-label="Seek to current segment start"
-        className="w-full rounded-md border border-border px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+        className="w-full rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
         onClick={onSeekSegmentStart}
         type="button"
       >
@@ -276,7 +276,7 @@ export function PlayerControls({
         </p>
       ) : null}
 
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-emerald-300/70">
         Shortcuts: Space (play/pause), ArrowLeft/ArrowRight (skip), +/- (rate)
       </p>
     </div>

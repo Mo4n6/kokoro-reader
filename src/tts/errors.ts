@@ -50,11 +50,30 @@ const WEBGPU_PATTERNS = [
   /requestadapter/i,
 ];
 
+const HUGGINGFACE_SINGLE_TOKEN_RESOLVE_PATTERN = /huggingface\.co\/([^/?#\s]+)\/(?:resolve|blob|raw|tree)\//i;
+
+const mapMalformedHuggingFaceModelIdError = (message: string): string | null => {
+  const match = message.match(HUGGINGFACE_SINGLE_TOKEN_RESOLVE_PATTERN);
+
+  if (!match) {
+    return null;
+  }
+
+  const token = match[1];
+  if (!token || token.includes('/')) {
+    return null;
+  }
+
+  return `KOKORO_MODEL_ID_INVALID: Expected model repo id like owner/name, got '${token}'.`;
+};
+
 export const classifyTTSFailure = (
   error: unknown,
   context: ClassifyTTSFailureContext = {}
 ): TTSFallbackError => {
-  const message = toMessage(error) || toMessage(context.error) || 'Unknown Kokoro failure.';
+  const rawMessage = toMessage(error) || toMessage(context.error) || 'Unknown Kokoro failure.';
+  const malformedModelIdMessage = mapMalformedHuggingFaceModelIdError(rawMessage);
+  const message = malformedModelIdMessage ?? rawMessage;
 
   if (message.includes("Failed to resolve module specifier 'kokoro-js'")) {
     return {

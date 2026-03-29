@@ -509,15 +509,22 @@ function App() {
   const initializeProvider = useCallback(async (activeCheck: () => boolean) => {
       const skipKokoroInit = isPagesStyleBase && shouldSkipKokoroInitOnPages;
       const forcedDeviceOverride = getDevDeviceOverride();
-      const shouldForceWebGpuAttempt = forcedDeviceOverride === 'webgpu';
-      const preferredDevice = forcedDeviceOverride ?? (shouldForceWebGpuAttempt ? 'webgpu' : undefined);
+    
+      // GREMLIN MODE ACTIVATED — extra nuclear flags
+      const urlParams = new URLSearchParams(window.location.search);
+      const forceWebGpu = forcedDeviceOverride === 'webgpu' || urlParams.get('forceWebGpu') === 'true';
+      const skipAllQualityChecks = forceWebGpu || urlParams.get('skipQuality') === 'true';
+    
       const selectedProvider = await selectTTSProvider({
-        preferredDevice,
-        allowWebGpuIfUnstable: shouldForceWebGpuAttempt,
-        skipWebGpuQualityCheck: shouldForceWebGpuAttempt,
+        preferredDevice: forceWebGpu ? 'webgpu' : forcedDeviceOverride,
+        
+        // THESE TWO ARE THE REAL KILLERS
+        allowWebGpuIfUnstable: true,                    // ← ignore previous unstable mark
+        skipWebGpuQualityCheck: skipAllQualityChecks,   // ← completely disable the near_silent_audio gate
+    
         skipKokoroInit,
         skipKokoroInitReason: skipKokoroInit
-          ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally while bundling is being finalized.'
+          ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally...'
           : undefined,
       });
       const providerName = selectedProvider.providerType;

@@ -405,6 +405,7 @@ function App() {
     Boolean(storedPreferences?.migratedLegacyWebSpeechVoice) && !loadVoiceMigrationDone(),
   );
   const [providerInitNonce, setProviderInitNonce] = useState(0);
+  const [forceWebGpuRetry, setForceWebGpuRetry] = useState(false);
 
   const shouldSuppressNextVoiceMigrationWarning = (
     hasPendingVoiceMigrationNormalization && !hasCompletedVoiceMigration
@@ -507,7 +508,7 @@ function App() {
       const selectedProvider = await selectTTSProvider({
         preferredDevice,
         allowWebGpuIfUnstable: shouldForceWebGpuAttempt,
-        skipWebGpuQualityCheck: forceWebGpuRetry,
+        skipWebGpuQualityCheck: shouldForceWebGpuAttempt,
         skipKokoroInit,
         skipKokoroInitReason: skipKokoroInit
           ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally while bundling is being finalized.'
@@ -526,6 +527,9 @@ function App() {
           kokoroImportable: kokoroPackageLoadable,
           fallbackCode: selectedProvider.fallbackError?.code ?? 'none',
         });
+      }
+      if (forceWebGpuRetry && activeCheck()) {
+        setForceWebGpuRetry(false);
       }
 
       if (import.meta.env.DEV) {
@@ -572,7 +576,7 @@ function App() {
         setShowInformationalFallbackBanner(Boolean(selectedProvider.fallbackIntentional));
         setProviderFallbackError(selectedProvider.fallbackError ?? null);
       }
-  }, [shouldSkipKokoroInitOnPages]);
+  }, [forceWebGpuRetry, shouldSkipKokoroInitOnPages]);
 
   useEffect(() => {
     let active = true;
@@ -586,6 +590,7 @@ function App() {
 
   const retryWebGpuForCurrentProfile = useCallback(() => {
     clearWebGpuUnstableProfileForCurrentBrowser();
+    setForceWebGpuRetry(true);
     setProviderInitNonce((current) => current + 1);
   }, []);
 
@@ -786,7 +791,7 @@ function App() {
 
     return {
       label: 'Kokoro • WASM',
-      colorClassName: 'border-sky-600/70 bg-sky-500/15 text-sky-200',
+      colorClassName: 'border-emerald-600/70 bg-emerald-500/10 text-emerald-200',
     };
   }, [providerRuntimeMetadata.providerType, providerRuntimeMetadata.runtime]);
 
@@ -801,13 +806,13 @@ function App() {
   const shouldShowAdvancedDetails = !isProduction || showDetails;
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl p-6 text-slate-100">
+    <main className="mx-auto min-h-screen max-w-7xl p-6 font-mono text-emerald-100">
       <header className="mb-6">
         <h1 className="text-3xl font-bold">TTS Reader MVP</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-emerald-300/70">
           Scaffold for source ingestion, normalization preview, and spoken playback.
         </p>
-        <p className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-300">
+        <p className="mt-2 flex flex-wrap items-center gap-3 text-xs text-emerald-200/90">
           <span>Runtime: <span className="font-semibold">{runtimeSummary}</span></span>
           <span>Model: <span className="font-semibold">onnx-community/Kokoro-82M-ONNX</span></span>
           <span>Voice: <span className="font-semibold">{voice || 'pending'}</span></span>
@@ -818,14 +823,14 @@ function App() {
         {isProduction ? (
           <button
             type="button"
-            className="mt-2 rounded-md border border-border px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
+            className="mt-2 rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 text-xs text-emerald-100 hover:border-emerald-300/70"
             onClick={() => setShowDetails((current) => !current)}
           >
             {showDetails ? 'Hide Details' : 'Details'}
           </button>
         ) : null}
         {shouldShowAdvancedDetails ? (
-          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-emerald-200/90">
           <span>
             Active voice provider: <span className="font-semibold">{providerRuntimeMetadata.providerType}</span>
           </span>
@@ -837,7 +842,7 @@ function App() {
           </p>
         ) : null}
         {shouldShowAdvancedDetails ? (
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-emerald-300/70">
             tts init: providerSelected={ttsInitStatusLine?.providerSelected ?? 'pending'} · runtime={ttsInitStatusLine?.runtime ?? 'pending'} · dtype={ttsInitStatusLine?.dtype ?? 'pending'} · skipKokoroInit={String(ttsInitStatusLine?.skipKokoroInit ?? false)} · kokoroImportable={ttsInitStatusLine ? String(ttsInitStatusLine.kokoroImportable) : 'pending'} · fallbackCode={ttsInitStatusLine?.fallbackCode ?? 'pending'}
           </p>
         ) : null}
@@ -869,12 +874,12 @@ function App() {
       ) : null}
 
       {providerRuntimeMetadata.providerType === 'kokoro' && providerRuntimeMetadata.runtimeReason ? (
-        <div className="mb-4 rounded-md border border-sky-700/80 bg-sky-950/30 px-3 py-2 text-sm text-sky-100">
+        <div className="mb-4 rounded-md border border-emerald-500/50 bg-[#07110a] px-3 py-2 text-sm text-emerald-100">
           <p>Runtime note: {providerRuntimeMetadata.runtimeReason}</p>
           {providerRuntimeMetadata.runtimeReason.includes('marked unstable') ? (
             <button
               type="button"
-              className="mt-2 rounded-md border border-sky-500 px-2 py-1 text-xs text-sky-100 hover:border-sky-300"
+              className="mt-2 rounded-md border border-emerald-400/70 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-100 hover:border-emerald-300"
               onClick={retryWebGpuForCurrentProfile}
             >
               Retry WebGPU for this browser profile
@@ -890,22 +895,22 @@ function App() {
       ) : null}
 
       {voiceMigrationInfo ? (
-        <div className="mb-4 rounded-md border border-sky-700 bg-sky-950/30 px-3 py-2 text-sm text-sky-100">
+        <div className="mb-4 rounded-md border border-emerald-500/45 bg-[#07110a] px-3 py-2 text-sm text-emerald-100">
           {voiceMigrationInfo}
         </div>
       ) : null}
 
       {!isVoiceReadyForPlayback ? (
-        <div className="mb-4 rounded-md border border-sky-700 bg-sky-950/30 px-3 py-2 text-sm text-sky-100">
+        <div className="mb-4 rounded-md border border-emerald-500/45 bg-[#07110a] px-3 py-2 text-sm text-emerald-100">
           Preparing voices for the active provider. Playback will be enabled once voice validation completes.
         </div>
       ) : null}
 
       {showInformationalFallbackBanner ? (
-        <div className="mb-4 rounded-md border border-sky-700 bg-sky-950/40 px-3 py-2 text-sm text-sky-100">
+        <div className="mb-4 rounded-md border border-emerald-500/45 bg-[#07110a] px-3 py-2 text-sm text-emerald-100">
           Web Speech mode ({getFallbackBucketLabel(providerFallbackError, true)}): intentionally enabled for GitHub Pages MVP while Kokoro bundling is finalized.
           {providerFallbackError?.message ? (
-            <p className="mt-1 text-xs text-sky-200">{providerFallbackError.message}</p>
+            <p className="mt-1 text-xs text-emerald-300/80">{providerFallbackError.message}</p>
           ) : null}
         </div>
       ) : null}
@@ -1008,7 +1013,7 @@ function App() {
       ) : null}
 
       <section className="grid gap-4 lg:grid-cols-3">
-        <article className="rounded-xl border border-border bg-panel p-4 shadow-lg shadow-black/20">
+        <article className="rounded-xl border border-emerald-500/35 bg-[#07110a] p-4 shadow-lg shadow-[0_0_18px_rgba(16,185,129,0.12)]">
           <h2 className="text-lg font-semibold">Input panel</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {sourceTabs.map((type) => (
@@ -1017,8 +1022,8 @@ function App() {
                 type="button"
                 className={`rounded-md border px-3 py-1.5 text-sm capitalize transition ${
                   sourceType === type
-                    ? 'border-sky-400 bg-sky-950 text-sky-200'
-                    : 'border-border text-slate-300 hover:border-slate-500'
+                    ? 'border-emerald-400 bg-emerald-500/15 text-emerald-100'
+                    : 'border-emerald-500/30 text-emerald-200/80 hover:border-emerald-300/60'
                 }`}
                 onClick={() => setSourceType(type)}
               >
@@ -1033,10 +1038,10 @@ function App() {
             </p>
           ) : null}
 
-          <label className="mt-4 block text-sm text-slate-300">
+          <label className="mt-4 block text-sm text-emerald-200/90">
             Paste text
             <textarea
-              className="mt-1 h-40 w-full rounded-md border border-border bg-slate-900 p-2"
+              className="mt-1 h-40 w-full rounded-md border border-emerald-500/30 bg-[#0a160f] p-2 text-emerald-100"
               value={textInput}
               onChange={(event) => {
                 setTextInput(event.target.value);
@@ -1045,21 +1050,21 @@ function App() {
             />
           </label>
 
-          <label className="mt-3 block text-sm text-slate-300">
+          <label className="mt-3 block text-sm text-emerald-200/90">
             Upload file
             <input
-              className="mt-1 block w-full rounded-md border border-border bg-slate-900 p-2"
+              className="mt-1 block w-full rounded-md border border-emerald-500/30 bg-[#0a160f] p-2 text-emerald-100"
               type="file"
               onChange={onFileChange}
             />
-            {selectedFileName ? <span className="mt-1 block text-xs text-slate-400">Selected: {selectedFileName}</span> : null}
+            {selectedFileName ? <span className="mt-1 block text-xs text-emerald-300/70">Selected: {selectedFileName}</span> : null}
           </label>
 
           {isUrlIngestEnabled ? (
-            <label className="mt-3 block text-sm text-slate-300">
+            <label className="mt-3 block text-sm text-emerald-200/90">
               Source URL
               <input
-                className="mt-1 w-full rounded-md border border-border bg-slate-900 p-2"
+                className="mt-1 w-full rounded-md border border-emerald-500/30 bg-[#0a160f] p-2 text-emerald-100"
                 type="url"
                 placeholder="https://example.com/article"
                 value={urlInput}
@@ -1072,20 +1077,20 @@ function App() {
           ) : null}
         </article>
 
-        <article className="rounded-xl border border-border bg-panel p-4 shadow-lg shadow-black/20">
+        <article className="rounded-xl border border-emerald-500/35 bg-[#07110a] p-4 shadow-lg shadow-[0_0_18px_rgba(16,185,129,0.12)]">
           <h2 className="text-lg font-semibold">Preview panel</h2>
-          <p className="mt-2 text-sm text-slate-400">Normalized segments: {ingested.document.segments.length}</p>
+          <p className="mt-2 text-sm text-emerald-300/70">Normalized segments: {ingested.document.segments.length}</p>
           <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
             {ingested.document.segments.map((segment, index) => (
               <div
                 key={segment.id}
                 className={`rounded-md border p-2 text-sm ${
                   player.currentSegmentIndex === index
-                    ? 'border-sky-500 bg-sky-950/40'
-                    : 'border-border bg-slate-900/70'
+                    ? 'border-emerald-400/80 bg-emerald-500/10'
+                    : 'border-emerald-500/30 bg-[#0a160f]'
                 }`}
               >
-                <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
+                <div className="mb-1 flex items-center justify-between text-xs text-emerald-300/70">
                   <span>{segment.blockType}</span>
                   <span>
                     {segment.sourceOffset?.start ?? 0}-{segment.sourceOffset?.end ?? segment.text.length}
@@ -1102,7 +1107,7 @@ function App() {
           </div>
         </article>
 
-        <article className="rounded-xl border border-border bg-panel p-4 shadow-lg shadow-black/20">
+        <article className="rounded-xl border border-emerald-500/35 bg-[#07110a] p-4 shadow-lg shadow-[0_0_18px_rgba(16,185,129,0.12)]">
           <h2 className="text-lg font-semibold">Playback panel</h2>
           <div className="space-y-3">
             <PlayerControls
@@ -1151,7 +1156,7 @@ function App() {
             />
             <button
               aria-label="Reset playback queue"
-              className="w-full rounded-md border border-border px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+              className="w-full rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
               onClick={() => {
                 void player.seekSegment(0, 0);
               }}

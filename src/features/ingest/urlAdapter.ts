@@ -1,20 +1,37 @@
 import { normalizeArticleReadable } from '../../domain/normalize';
 import { NormalizedDocument } from '../../domain/segments';
+import { sanitizeReadabilityHtml } from '../preview/sanitizeHtml';
 
 interface ExtractResponse {
   article?: {
     title?: string;
     textContent?: string;
+    content?: string;
   };
   title?: string;
   textContent?: string;
   content?: string;
 }
 
+function extractTextFromHtml(html: string): string {
+  if (!html.trim()) {
+    return '';
+  }
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return doc.body.textContent?.trim() ?? '';
+}
+
 function toReadablePayload(payload: ExtractResponse): { title?: string; textContent: string } {
   const articleText = payload.article?.textContent;
-  const topLevelText = payload.textContent ?? payload.content;
-  const textContent = articleText ?? topLevelText ?? '';
+  const topLevelText = payload.textContent;
+
+  const articleContent = sanitizeReadabilityHtml(payload.article?.content ?? '');
+  const topLevelContent = sanitizeReadabilityHtml(payload.content ?? '');
+  const articleTextFromHtml = extractTextFromHtml(articleContent);
+  const topLevelTextFromHtml = extractTextFromHtml(topLevelContent);
+
+  const textContent = articleText ?? topLevelText ?? articleTextFromHtml ?? topLevelTextFromHtml;
 
   return {
     title: payload.article?.title ?? payload.title,

@@ -146,6 +146,11 @@ export function PlayerControls({
           ))
         )}
       </select>
+      {import.meta.env.DEV ? (
+        <p className="text-xs text-slate-400" aria-live="polite">
+          Selected voice.id: <span className="font-mono text-slate-200">{voice}</span>
+        </p>
+      ) : null}
       {!isVoiceReadyForPlayback && voiceReadinessHelperText ? (
         <p className="text-xs text-amber-300" role="status">
           {voiceReadinessHelperText}

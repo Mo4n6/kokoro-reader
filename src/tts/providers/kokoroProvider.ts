@@ -26,6 +26,15 @@ type KokoroEngine = {
   ) => Promise<Blob | ArrayBuffer | Uint8Array>;
 };
 
+const importKokoroModule = async (): Promise<KokoroModule> => {
+  const dynamicImport = new Function('modulePath', 'return import(modulePath);') as (
+    modulePath: string
+  ) => Promise<unknown>;
+
+  const module = await dynamicImport('kokoro-js');
+  return module as KokoroModule;
+};
+
 const toAudioBlob = (audio: Blob | ArrayBuffer | Uint8Array): Blob => {
   if (audio instanceof Blob) {
     return audio;
@@ -42,7 +51,7 @@ const toAudioBlob = (audio: Blob | ArrayBuffer | Uint8Array): Blob => {
 
 export const canImportKokoroModule = async (): Promise<boolean> => {
   try {
-    await import('kokoro-js');
+    await importKokoroModule();
     return true;
   } catch {
     return false;
@@ -104,8 +113,7 @@ export class KokoroProvider implements TTSProvider {
 
   private async loadKokoroEngine(): Promise<KokoroEngine> {
     const startedAt = perfTelemetry.now();
-    const module = await import('kokoro-js');
-    const kokoroModule = module as KokoroModule;
+    const kokoroModule = await importKokoroModule();
     const engine = await kokoroModule.createKokoroTTS({
       model: this.model,
       device: this.device,

@@ -8,7 +8,11 @@ This repository is configured to deploy the built Vite app to GitHub Pages via G
 
 Set the following environment variable for Pages builds:
 
-- `VITE_ENABLE_URL_EXTRACTOR=false`
+- `VITE_ENABLE_URL_INGEST=false`
+
+For environments that support backend URL extraction, configure:
+
+- `VITE_EXTRACT_API_BASE_URL=/api/extract`
 
 ### Optional model/runtime flags
 

@@ -11,6 +11,7 @@ export interface PlayerSegment {
 }
 
 export interface QueueSegmentModel {
+  cacheKey: string;
   segmentId: string;
   synthesisStatus: SegmentSynthesisStatus;
   audioUrl: string | null;
@@ -38,6 +39,28 @@ type Action =
   | { type: 'RESET_ERROR' };
 
 const DEFAULT_LOOKAHEAD = 2;
+const UNKNOWN_PROVIDER_ID = 'unknown-provider';
+
+function getProviderId(provider: TTSProvider): string {
+  const providerWithId = provider as TTSProvider & { providerId?: string; id?: string };
+  if (typeof providerWithId.providerId === 'string' && providerWithId.providerId.length > 0) {
+    return providerWithId.providerId;
+  }
+  if (typeof providerWithId.id === 'string' && providerWithId.id.length > 0) {
+    return providerWithId.id;
+  }
+  return provider.constructor?.name || UNKNOWN_PROVIDER_ID;
+}
+
+function buildSynthesisCacheKey(
+  providerId: string,
+  segmentId: string,
+  options?: TTSSynthesisOptions,
+): string {
+  const voice = options?.voice ?? '';
+  const rate = options?.rate ?? '';
+  return `${providerId}|${segmentId}|${voice}|${rate}`;
+}
 
 function createInitialState(cursor?: PlayerResumeCursor): PlayerInternalState {
   return {
@@ -124,19 +147,28 @@ export function usePlayerController({
     queueVersionRef.current += 1;
   }, []);
 
+  const providerId = useMemo(() => getProviderId(provider), [provider]);
+  const getCacheKey = useCallback((segmentId: string) => {
+    return buildSynthesisCacheKey(providerId, segmentId, synthesisOptions);
+  }, [providerId, synthesisOptions]);
+
   const setQueueEntry = useCallback((entry: QueueSegmentModel) => {
-    queueRef.current.set(entry.segmentId, entry);
+    queueRef.current.set(entry.cacheKey, entry);
     bumpQueueVersion();
   }, [bumpQueueVersion]);
 
   const queue = useMemo<QueueSegmentModel[]>(() => {
     void queueVersionRef.current;
-    return segments.map((segment) => queueRef.current.get(segment.id) ?? {
-      segmentId: segment.id,
-      synthesisStatus: 'idle',
-      audioUrl: null,
+    return segments.map((segment) => {
+      const cacheKey = getCacheKey(segment.id);
+      return queueRef.current.get(cacheKey) ?? {
+        cacheKey,
+        segmentId: segment.id,
+        synthesisStatus: 'idle',
+        audioUrl: null,
+      };
     });
-  }, [segments, machine.currentSegmentIndex, machine.state, machine.charOffset]);
+  }, [getCacheKey, segments, machine.currentSegmentIndex, machine.state, machine.charOffset]);
 
   const persistCursor = useCallback((segmentIndex: number, charOffset: number) => {
     if (typeof window === 'undefined') {
@@ -156,7 +188,8 @@ export function usePlayerController({
       return null;
     }
 
-    const existing = queueRef.current.get(segment.id);
+    const cacheKey = getCacheKey(segment.id);
+    const existing = queueRef.current.get(cacheKey);
     if (existing?.synthesisStatus === 'ready') {
       if (existing.audioUrl) {
         return { segmentId: segment.id, blob: new Blob(), url: existing.audioUrl, mode: 'audio-url' };
@@ -166,12 +199,12 @@ export function usePlayerController({
       }
     }
 
-    if (nextPrefetchInFlightRef.current.has(segment.id)) {
+    if (nextPrefetchInFlightRef.current.has(cacheKey)) {
       return null;
     }
 
-    nextPrefetchInFlightRef.current.add(segment.id);
-    setQueueEntry({ segmentId: segment.id, synthesisStatus: 'loading', audioUrl: existing?.audioUrl ?? null });
+    nextPrefetchInFlightRef.current.add(cacheKey);
+    setQueueEntry({ cacheKey, segmentId: segment.id, synthesisStatus: 'loading', audioUrl: existing?.audioUrl ?? null });
 
     try {
       const synthStartedAt = perfTelemetry.now();
@@ -182,6 +215,7 @@ export function usePlayerController({
         durationMs: Math.round(perfTelemetry.now() - synthStartedAt),
       });
       setQueueEntry({
+        cacheKey,
         segmentId: segment.id,
         synthesisStatus: 'ready',
         audioUrl: 'url' in result ? result.url : null,
@@ -195,13 +229,13 @@ export function usePlayerController({
         segmentId: segment.id,
         reason: message,
       });
-      setQueueEntry({ segmentId: segment.id, synthesisStatus: 'error', audioUrl: null, error: message });
+      setQueueEntry({ cacheKey, segmentId: segment.id, synthesisStatus: 'error', audioUrl: null, error: message });
       dispatch({ type: 'SET_ERROR', error: message });
       return null;
     } finally {
-      nextPrefetchInFlightRef.current.delete(segment.id);
+      nextPrefetchInFlightRef.current.delete(cacheKey);
     }
-  }, [provider, segments, setQueueEntry, synthesisOptions]);
+  }, [getCacheKey, provider, segments, setQueueEntry, synthesisOptions]);
 
   const prefetchUpcoming = useCallback(async (startIndex: number) => {
     const targetIndices = Array.from({ length: Math.max(0, prefetchCount) }, (_, offset) => startIndex + offset + 1)
@@ -213,22 +247,23 @@ export function usePlayerController({
         return;
       }
 
-      const existing = queueRef.current.get(segment.id);
+      const cacheKey = getCacheKey(segment.id);
+      const existing = queueRef.current.get(cacheKey);
       if (existing?.synthesisStatus === 'ready' || existing?.synthesisStatus === 'loading') {
         return;
       }
 
-      setQueueEntry({ segmentId: segment.id, synthesisStatus: 'queued', audioUrl: existing?.audioUrl ?? null });
+      setQueueEntry({ cacheKey, segmentId: segment.id, synthesisStatus: 'queued', audioUrl: existing?.audioUrl ?? null });
       await synthesizeSegment(index);
 
-      const entry = queueRef.current.get(segment.id);
+      const entry = queueRef.current.get(cacheKey);
       if (entry?.audioUrl) {
         const preload = new Audio(entry.audioUrl);
         preload.preload = 'auto';
         preload.load();
       }
     }));
-  }, [prefetchCount, segments, setQueueEntry, synthesizeSegment]);
+  }, [getCacheKey, prefetchCount, segments, setQueueEntry, synthesizeSegment]);
 
   const cleanupAudio = useCallback(() => {
     if (!activeAudioRef.current) {
@@ -337,7 +372,7 @@ export function usePlayerController({
           persistCursor(nextIndex, 0);
           queueTransitionCountRef.current += 1;
           const nextSegment = segments[nextIndex];
-          const nextQueueEntry = nextSegment ? queueRef.current.get(nextSegment.id) : undefined;
+          const nextQueueEntry = nextSegment ? queueRef.current.get(getCacheKey(nextSegment.id)) : undefined;
           if (nextSegment && nextQueueEntry?.synthesisStatus !== 'ready') {
             queueUnderrunCountRef.current += 1;
             perfTelemetry.sink.log({
@@ -399,7 +434,7 @@ export function usePlayerController({
         persistCursor(nextIndex, 0);
         queueTransitionCountRef.current += 1;
         const nextSegment = segments[nextIndex];
-        const nextQueueEntry = nextSegment ? queueRef.current.get(nextSegment.id) : undefined;
+        const nextQueueEntry = nextSegment ? queueRef.current.get(getCacheKey(nextSegment.id)) : undefined;
         if (nextSegment && nextQueueEntry?.synthesisStatus !== 'ready') {
           queueUnderrunCountRef.current += 1;
           perfTelemetry.sink.log({

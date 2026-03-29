@@ -72,6 +72,10 @@ type IngestedState = {
 
 const migrateStoredVoice = (voice: string): string => normalizeKokoroVoiceId(voice);
 
+const getDefaultKokoroVoice = (voices: TTSVoice[]): TTSVoice | undefined => (
+  voices.find((providerVoice) => providerVoice.id === 'af_alloy') ?? voices[0]
+);
+
 const getWebSpeechVoiceIds = (): string[] => {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return [];
@@ -101,7 +105,7 @@ const loadTtsPreferences = (): LoadedTtsPreferences | null => {
     const normalizedIncomingVoice = isLegacyOrUnknownProvider
       && normalizedProvider === 'kokoro'
       && isLikelyWebSpeechVoiceId(parsed.voice)
-      ? 'af_alloy'
+      ? ''
       : parsed.voice;
     const migratedVoice = migrateStoredVoice(normalizedIncomingVoice);
     const webSpeechVoiceIds = normalizedProvider === 'web-speech' ? getWebSpeechVoiceIds() : [];
@@ -148,11 +152,6 @@ const persistVoiceMigrationDone = (): void => {
 
   window.localStorage.setItem(VOICE_MIGRATION_DONE_STORAGE_KEY, 'true');
 };
-
-const getDefaultKokoroVoiceId = (voices: TTSVoice[]): string => (
-  voices.find((providerVoice) => providerVoice.id === 'af_alloy')?.id ?? voices[0]?.id ?? ''
-);
-
 
 type ProviderRuntimeMetadata = {
   providerType: 'kokoro' | 'web-speech';
@@ -460,7 +459,7 @@ function App() {
         }
 
         const fallbackVoice = providerLabel === 'kokoro'
-          ? voices.find((providerVoice) => providerVoice.id === getDefaultKokoroVoiceId(voices)) ?? voices[0]
+          ? getDefaultKokoroVoice(voices) ?? voices[0]
           : voices[0];
         setVoiceReadinessHelperText('Select a valid voice.');
         setVoice(fallbackVoice.id);

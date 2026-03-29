@@ -350,6 +350,14 @@ function App() {
           : voices[0];
         setVoiceReadinessHelperText('Select a valid voice.');
         setVoice(fallbackVoice.id);
+        if (typeof window !== 'undefined') {
+          const normalizedPreferences: StoredTtsPreferences = {
+            voice: fallbackVoice.id,
+            provider: providerLabel,
+            rate,
+          };
+          window.localStorage.setItem(TTS_PREFS_STORAGE_KEY, JSON.stringify(normalizedPreferences));
+        }
         const suppressWarning = providerLabel === 'web-speech' && shouldSuppressNextWebSpeechMigrationWarning;
         if (suppressWarning) {
           setVoiceFallbackWarning(null);

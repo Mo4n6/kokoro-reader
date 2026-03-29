@@ -9,4 +9,18 @@ const productionBase = (() => {
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   base: mode === 'production' ? productionBase : '/',
+  optimizeDeps: {
+    include: ['kokoro-js'],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/kokoro-js') || id.includes('node_modules/@huggingface/transformers')) {
+            return 'kokoro';
+          }
+        },
+      },
+    },
+  },
 }));

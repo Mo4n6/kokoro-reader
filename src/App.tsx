@@ -395,6 +395,40 @@ function App() {
   ), [ingested.document.segments]);
   const playbackMode = playbackModeOverride ?? defaultPlaybackMode;
 
+  const languageOptions = useMemo<Array<{ value: string; label: string }>>(() => {
+    const distinctLanguages = Array.from(
+      new Set(
+        availableVoices
+          .map((providerVoice) => normalizeLanguageTag(providerVoice.language))
+          .filter((language) => language.length > 0),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return [
+      { value: 'auto', label: 'Auto' },
+      ...distinctLanguages.map((language) => ({ value: language, label: language })),
+    ];
+  }, [availableVoices]);
+
+  const effectiveVoiceLanguage = useMemo(() => {
+    if (selectedVoiceLanguage !== 'auto') {
+      return selectedVoiceLanguage;
+    }
+
+    const selectedVoice = availableVoices.find((providerVoice) => providerVoice.id === voice);
+    const selectedVoiceLanguageTag = normalizeLanguageTag(selectedVoice?.language);
+    if (selectedVoiceLanguageTag) {
+      return selectedVoiceLanguageTag;
+    }
+
+    const defaultLanguage = normalizeLanguageTag(availableVoices[0]?.language);
+    return defaultLanguage || 'en';
+  }, [availableVoices, selectedVoiceLanguage, voice]);
+
+  const filteredVoices = useMemo(() => (
+    getPreferredVoicesForLanguage(availableVoices, effectiveVoiceLanguage)
+  ), [availableVoices, effectiveVoiceLanguage]);
+
   const playbackData = useMemo(() => {
     if (playbackMode === 'continuous') {
       return buildContinuousPlayback(ingested.document.segments);

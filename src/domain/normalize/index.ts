@@ -1,3 +1,3 @@
 export { normalizeArticleReadable } from './normalizeArticleReadable';
-export { normalizeMarkdown } from './normalizeMarkdown';
+export { normalizeMarkdown, sanitizeMarkdownHtmlPreview } from './normalizeMarkdown';
 export { normalizePlainText } from './normalizePlainText';

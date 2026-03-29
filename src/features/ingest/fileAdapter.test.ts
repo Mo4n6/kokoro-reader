@@ -1,19 +1,42 @@
 import { JSDOM } from 'jsdom';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { markdownFixture, plainTextFixture } from '../../domain/normalize/__fixtures__/index.fixture';
-import { ingestFile, FileParseError, sanitizeFilePreviewHtml } from './fileAdapter';
+import { ingestFile, sanitizeFilePreviewHtml } from './fileAdapter';
 
 describe('ingestFile html handling', () => {
   const originalDomParser = globalThis.DOMParser;
+  const originalWindow = globalThis.window;
+  const originalElement = globalThis.Element;
+  let jsdom: JSDOM | null = null;
 
   beforeAll(() => {
+    jsdom = new JSDOM('');
+
+    if (!globalThis.window) {
+      Object.assign(globalThis, { window: jsdom.window });
+    }
+    if (!globalThis.Element) {
+      Object.assign(globalThis, { Element: jsdom.window.Element });
+    }
+
     if (!globalThis.DOMParser) {
-      globalThis.DOMParser = new JSDOM('').window.DOMParser;
+      globalThis.DOMParser = jsdom.window.DOMParser;
     }
   });
 
   afterAll(() => {
     globalThis.DOMParser = originalDomParser;
+    if (originalWindow) {
+      Object.assign(globalThis, { window: originalWindow });
+    } else {
+      Reflect.deleteProperty(globalThis, 'window');
+    }
+    if (originalElement) {
+      Object.assign(globalThis, { Element: originalElement });
+    } else {
+      Reflect.deleteProperty(globalThis, 'Element');
+    }
+    jsdom?.window.close();
   });
 
   it('parses a valid html file into readable normalized text', async () => {
@@ -124,7 +147,7 @@ describe('ingestFile type routing and validation', () => {
   it('throws UNSUPPORTED_FILE_TYPE for unsupported file types', async () => {
     const file = new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' });
 
-    await expect(ingestFile(file)).rejects.toMatchObject<FileParseError>({
+    await expect(ingestFile(file)).rejects.toMatchObject({
       code: 'UNSUPPORTED_FILE_TYPE',
       fileName: 'report.pdf',
     });
@@ -133,7 +156,7 @@ describe('ingestFile type routing and validation', () => {
   it('throws BINARY_FILE_CONTENT when control characters are detected', async () => {
     const file = new File(['\u0000\u0007'], 'binary.txt', { type: 'text/plain' });
 
-    await expect(ingestFile(file)).rejects.toMatchObject<FileParseError>({
+    await expect(ingestFile(file)).rejects.toMatchObject({
       code: 'BINARY_FILE_CONTENT',
       fileName: 'binary.txt',
     });

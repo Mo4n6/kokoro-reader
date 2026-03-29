@@ -9,9 +9,9 @@ import { setupLocalDebugPerfTelemetry } from './tts/perfTelemetry';
 import { WebSpeechProvider } from './tts/providers/webSpeechProvider';
 import type { TTSProvider } from './tts/types';
 
-const isUrlExtractorEnabled = import.meta.env.VITE_ENABLE_URL_EXTRACTOR !== 'false';
+const isUrlIngestEnabled = import.meta.env.VITE_ENABLE_URL_INGEST !== 'false';
 type SourceType = 'text' | 'file' | 'url';
-const sourceTabs: SourceType[] = isUrlExtractorEnabled ? ['text', 'file', 'url'] : ['text', 'file'];
+const sourceTabs: SourceType[] = isUrlIngestEnabled ? ['text', 'file', 'url'] : ['text', 'file'];
 const TTS_PREFS_STORAGE_KEY = 'reader-tts-preferences';
 
 type StoredTtsPreferences = {
@@ -138,7 +138,7 @@ function App() {
       try {
         const nextModel = sourceType === 'text'
           ? toIngestedState({ type: 'text', value: textInput }, await ingestInput({ type: 'paste', payload: textInput }))
-          : sourceType === 'url' && isUrlExtractorEnabled
+          : sourceType === 'url' && isUrlIngestEnabled
             ? toIngestedState(
               { type: 'url', value: urlInput },
               await ingestInput({ type: 'url', payload: urlInput }),
@@ -268,7 +268,7 @@ function App() {
             ))}
           </div>
 
-          {!isUrlExtractorEnabled ? (
+          {!isUrlIngestEnabled ? (
             <p className="mt-3 rounded border border-amber-700 bg-amber-950/40 p-2 text-xs text-amber-200">
               URL reading requires backend extractor; paste/upload still available.
             </p>
@@ -296,7 +296,7 @@ function App() {
             {selectedFileName ? <span className="mt-1 block text-xs text-slate-400">Selected: {selectedFileName}</span> : null}
           </label>
 
-          {isUrlExtractorEnabled ? (
+          {isUrlIngestEnabled ? (
             <label className="mt-3 block text-sm text-slate-300">
               Source URL
               <input

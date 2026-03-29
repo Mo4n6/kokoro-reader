@@ -33,7 +33,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_ENABLE_URL_EXTRACTOR: 'false'
+          VITE_ENABLE_URL_INGEST: 'false'
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

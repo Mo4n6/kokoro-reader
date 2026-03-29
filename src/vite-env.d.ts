@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_ENABLE_URL_EXTRACTOR?: string;
-  readonly VITE_EXTRACTOR_API_BASE?: string;
+  readonly VITE_ENABLE_URL_INGEST?: string;
+  readonly VITE_EXTRACT_API_BASE_URL?: string;
 }
 
 interface ImportMeta {

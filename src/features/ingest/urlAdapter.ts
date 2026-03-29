@@ -13,6 +13,21 @@ interface ExtractResponse {
   content?: string;
 }
 
+export type UrlIngestErrorCode =
+  | 'URL_INGEST_DISABLED'
+  | 'URL_EXTRACT_UNAVAILABLE'
+  | 'URL_EXTRACT_FAILED';
+
+export class UrlIngestError extends Error {
+  constructor(
+    public readonly code: UrlIngestErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'UrlIngestError';
+  }
+}
+
 function extractTextFromHtml(html: string): string {
   if (!html.trim()) {
     return '';
@@ -43,17 +58,43 @@ function toReadablePayload(payload: ExtractResponse): { title?: string; textCont
  * Sends a URL to the backend extractor and normalizes the readability payload.
  */
 export async function ingestUrl(url: string): Promise<NormalizedDocument> {
-  const extractorApiBase = import.meta.env.VITE_EXTRACTOR_API_BASE?.trim() || '/api/extract';
-  const response = await fetch(extractorApiBase, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ url }),
-  });
+  if (import.meta.env.VITE_ENABLE_URL_INGEST === 'false') {
+    throw new UrlIngestError(
+      'URL_INGEST_DISABLED',
+      'URL ingestion is disabled in this environment. Paste text or upload a file instead.',
+    );
+  }
+
+  const extractApiBaseUrl = import.meta.env.VITE_EXTRACT_API_BASE_URL?.trim() || '/api/extract';
+
+  let response: Response;
+  try {
+    response = await fetch(extractApiBaseUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+  } catch {
+    throw new UrlIngestError(
+      'URL_EXTRACT_UNAVAILABLE',
+      'URL extraction is currently unavailable. Please try again later or use paste/upload instead.',
+    );
+  }
 
   if (!response.ok) {
-    throw new Error(`URL extract failed with status ${response.status}`);
+    if (response.status === 404 || response.status >= 500) {
+      throw new UrlIngestError(
+        'URL_EXTRACT_UNAVAILABLE',
+        'URL extraction service is unavailable right now. Please try again later or use paste/upload instead.',
+      );
+    }
+
+    throw new UrlIngestError(
+      'URL_EXTRACT_FAILED',
+      'We could not extract readable text from that URL. Verify the link and try another page.',
+    );
   }
 
   const payload = (await response.json()) as ExtractResponse;

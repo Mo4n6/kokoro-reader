@@ -163,10 +163,10 @@ const resolveKokoroDtype = (
   }
 
   if (device === 'webgpu') {
-    return 'q8';
+    return 'fp32';
   }
 
-  return 'q8';
+  return 'fp32';
 };
 
 const logFallbackRecordForDev = (fallbackError: TTSFallbackError): void => {

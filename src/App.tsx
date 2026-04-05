@@ -12,8 +12,7 @@ import { canImportKokoroModule } from './tts/providers/kokoroProvider';
 import { WebSpeechProvider } from './tts/providers/webSpeechProvider';
 import type { KokoroDType, RuntimeDType, TTSProvider, TTSVoice } from './tts/types';
 import { chunkSegmentsByPolicy, defaultChunkingPolicy } from './domain/chunking/policy';
-import { concatAudioBlobs, concatAudioBlobsToPcm } from './tts/concatAudioBlobs';
-import { encodeMp3FromPcm } from './tts/encodeMp3';
+import { buildFullAudioExport, MP3_FALLBACK_WARNING, type ExportFormat } from './tts/buildFullAudioExport';
 
 type PlaybackAnchor = {
   segmentId: string;
@@ -127,7 +126,6 @@ type FullAudioBuildState = {
   fileName: string;
 };
 type PlaybackSource = 'stream' | 'exported';
-type ExportFormat = 'wav' | 'mp3';
 
 const migrateStoredVoice = (voice: string): string => normalizeKokoroVoiceId(voice);
 
@@ -543,19 +541,7 @@ function App() {
         return null;
       }
 
-      const wavBlob = await concatAudioBlobs(blobs);
-      let exportedBlob = wavBlob;
-      let exportError: string | null = null;
-
-      if (exportFormat === 'mp3') {
-        const decodedPcm = await concatAudioBlobsToPcm(blobs);
-        const mp3Blob = await encodeMp3FromPcm(decodedPcm);
-        if (!mp3Blob) {
-          exportError = 'MP3 export is unavailable in this runtime. Downloading WAV instead.';
-        } else {
-          exportedBlob = mp3Blob;
-        }
-      }
+      const { blob: exportedBlob, warning: exportWarning } = await buildFullAudioExport(blobs, exportFormat);
 
       const audioUrl = URL.createObjectURL(exportedBlob);
       setFullAudioBuild((current) => ({
@@ -564,7 +550,7 @@ function App() {
         audioUrl,
         builtSegments: totalSegments,
         fileName: `${toFileNameStem(ingested.title)}.${exportedBlob.type === 'audio/mpeg' ? 'mp3' : 'wav'}`,
-        error: exportError,
+        error: exportWarning,
       }));
       return audioUrl;
     } catch (error) {
@@ -1516,7 +1502,15 @@ function App() {
                 )}%
               </p>
               {fullAudioBuild.error ? (
-                <p className="mt-2 rounded border border-rose-700 bg-rose-950/40 p-2 text-xs text-rose-200">{fullAudioBuild.error}</p>
+                <p
+                  className={`mt-2 rounded border p-2 text-xs ${fullAudioBuild.status === 'ready'
+                    ? 'border-amber-600 bg-amber-950/40 text-amber-100'
+                    : 'border-rose-700 bg-rose-950/40 text-rose-200'}`}
+                >
+                  {fullAudioBuild.status === 'ready' && fullAudioBuild.error === MP3_FALLBACK_WARNING
+                    ? `Warning: ${fullAudioBuild.error}`
+                    : fullAudioBuild.error}
+                </p>
               ) : null}
             </div>
           </div>

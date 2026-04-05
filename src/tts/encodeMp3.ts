@@ -46,25 +46,32 @@ export async function encodeMp3FromPcm(decodedAudio: DecodedPcmAudio): Promise<B
     ? float32ToInt16(decodedAudio.channels[1] ?? decodedAudio.channels[0] ?? new Float32Array(0))
     : undefined;
 
-  const encoder = new lamejs.Mp3Encoder(channelCount, decodedAudio.sampleRate, DEFAULT_BIT_RATE_KBPS);
-  const chunks: BlobPart[] = [];
+  try {
+    const encoder = new lamejs.Mp3Encoder(channelCount, decodedAudio.sampleRate, DEFAULT_BIT_RATE_KBPS);
+    const chunks: BlobPart[] = [];
 
-  for (let offset = 0; offset < leftChannel.length; offset += FRAME_SIZE) {
-    const leftChunk = leftChannel.subarray(offset, Math.min(offset + FRAME_SIZE, leftChannel.length));
-    const rightChunk = rightChannel?.subarray(offset, Math.min(offset + FRAME_SIZE, rightChannel.length));
-    const encodedChunk = channelCount > 1
-      ? encoder.encodeBuffer(leftChunk, rightChunk)
-      : encoder.encodeBuffer(leftChunk);
+    for (let offset = 0; offset < leftChannel.length; offset += FRAME_SIZE) {
+      const leftChunk = leftChannel.subarray(offset, Math.min(offset + FRAME_SIZE, leftChannel.length));
+      const rightChunk = rightChannel?.subarray(offset, Math.min(offset + FRAME_SIZE, rightChannel.length));
+      const encodedChunk = channelCount > 1
+        ? encoder.encodeBuffer(leftChunk, rightChunk)
+        : encoder.encodeBuffer(leftChunk);
 
-    if (encodedChunk.length > 0) {
-      chunks.push(Uint8Array.from(encodedChunk));
+      if (encodedChunk.length > 0) {
+        chunks.push(Uint8Array.from(encodedChunk));
+      }
     }
-  }
 
-  const flushChunk = encoder.flush();
-  if (flushChunk.length > 0) {
-    chunks.push(Uint8Array.from(flushChunk));
-  }
+    const flushChunk = encoder.flush();
+    if (flushChunk.length > 0) {
+      chunks.push(Uint8Array.from(flushChunk));
+    }
 
-  return new Blob(chunks, { type: MP3_MIME });
+    return new Blob(chunks, { type: MP3_MIME });
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      console.debug('[tts][mp3] MP3 encoder failed; falling back to WAV.', error);
+    }
+    return null;
+  }
 }

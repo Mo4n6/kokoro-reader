@@ -4,6 +4,7 @@ import type { DecodedPcmAudio } from './concatAudioBlobs';
 const concatAudioBlobsMock = vi.fn();
 const concatAudioBlobsToPcmMock = vi.fn();
 const encodeMp3FromPcmMock = vi.fn();
+const getLastMp3EncodingDiagnosticMock = vi.fn();
 
 vi.mock('./concatAudioBlobs', () => ({
   concatAudioBlobs: (...args: unknown[]) => concatAudioBlobsMock(...args),
@@ -11,7 +12,9 @@ vi.mock('./concatAudioBlobs', () => ({
 }));
 
 vi.mock('./encodeMp3', () => ({
+  MP3_FALLBACK_WARNING: 'MP3 unavailable in this runtime; WAV provided instead.',
   encodeMp3FromPcm: (...args: unknown[]) => encodeMp3FromPcmMock(...args),
+  getLastMp3EncodingDiagnostic: (...args: unknown[]) => getLastMp3EncodingDiagnosticMock(...args),
 }));
 
 describe('buildFullAudioExport', () => {
@@ -30,13 +33,18 @@ describe('buildFullAudioExport', () => {
     concatAudioBlobsMock.mockResolvedValue(wavBlob);
     concatAudioBlobsToPcmMock.mockResolvedValue(decodedPcm);
     encodeMp3FromPcmMock.mockResolvedValue(null);
+    getLastMp3EncodingDiagnosticMock.mockReturnValue({
+      code: 'encoder_runtime_failed',
+      reason: 'The MP3 encoder failed while encoding audio frames.',
+      technicalDetail: 'encode failed',
+    });
 
-    const { buildFullAudioExport, MP3_FALLBACK_WARNING } = await import('./buildFullAudioExport');
+    const { buildFullAudioExport } = await import('./buildFullAudioExport');
     const result = await buildFullAudioExport(sourceBlobs, 'mp3');
 
     expect(result).toEqual({
       blob: wavBlob,
-      warning: MP3_FALLBACK_WARNING,
+      warning: 'MP3 unavailable in this runtime; WAV provided instead. (encoder_runtime_failed: encode failed)',
     });
   });
 });

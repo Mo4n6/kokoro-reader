@@ -12,7 +12,8 @@ import { canImportKokoroModule } from './tts/providers/kokoroProvider';
 import { WebSpeechProvider } from './tts/providers/webSpeechProvider';
 import type { KokoroDType, RuntimeDType, TTSProvider, TTSVoice } from './tts/types';
 import { chunkSegmentsByPolicy, defaultChunkingPolicy } from './domain/chunking/policy';
-import { buildFullAudioExport, MP3_FALLBACK_WARNING, type ExportFormat } from './tts/buildFullAudioExport';
+import { buildFullAudioExport, type ExportFormat } from './tts/buildFullAudioExport';
+import { MP3_FALLBACK_WARNING, probeMp3EncodingCapability, type Mp3CapabilityProbe } from './tts/encodeMp3';
 import { PreviewPanel } from './features/preview/PreviewPanel';
 import {
   SYNTHESIS_MAX_SPLIT_DEPTH,
@@ -244,6 +245,7 @@ type TtsInitStatusLine = {
 
 type DevTtsDiagnostics = {
   kokoroPackageLoadable: boolean;
+  mp3Preflight: Mp3CapabilityProbe;
   webgpuSupported: boolean;
   deviceMemoryGb?: number;
   forcedDeviceOverride: 'webgpu' | 'wasm' | 'none';
@@ -391,6 +393,7 @@ function App() {
   const [voiceReadinessHelperText, setVoiceReadinessHelperText] = useState<string | null>('Loading voices…');
   const [ttsInitStatusLine, setTtsInitStatusLine] = useState<TtsInitStatusLine | null>(null);
   const [devTtsDiagnostics, setDevTtsDiagnostics] = useState<DevTtsDiagnostics | null>(null);
+  const [mp3Capability, setMp3Capability] = useState<Mp3CapabilityProbe | null>(null);
   const [firstAudioTimingMs, setFirstAudioTimingMs] = useState<number | null>(null);
   const [showDetails, setShowDetails] = useState(!isProduction);
   const [voice, setVoice] = useState(storedPreferences?.voice ?? '');
@@ -733,6 +736,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    setMp3Capability(probeMp3EncodingCapability());
+  }, []);
+
+  useEffect(() => {
     clearFullAudioBuild();
   }, [clearFullAudioBuild, provider, playbackData.playbackSegments, rate, voice]);
 
@@ -865,6 +872,7 @@ function App() {
       const fallbackSummary = getFallbackReasonAndHint(selectedProvider.fallbackError);
       const diagnostics: DevTtsDiagnostics = {
         kokoroPackageLoadable,
+        mp3Preflight: probeMp3EncodingCapability(),
         webgpuSupported: await checkWebGpuSupport(),
         deviceMemoryGb: getDeviceMemoryGb(),
         forcedDeviceOverride: getDevDeviceOverride() ?? 'none',   // safe here
@@ -1182,7 +1190,7 @@ function App() {
         ) : null}
         {shouldShowAdvancedDetails ? (
           <p className="mt-2 text-xs text-emerald-300/70">
-            tts init: providerSelected={ttsInitStatusLine?.providerSelected ?? 'pending'} · runtime={ttsInitStatusLine?.runtime ?? 'pending'} · dtype={ttsInitStatusLine?.dtype ?? 'pending'} · skipKokoroInit={String(ttsInitStatusLine?.skipKokoroInit ?? false)} · {SKIP_KOKORO_INIT_ON_PAGES_ENV_FLAG}={skipKokoroInitOnPagesEnvValue ?? 'undefined'} · kokoroImportable={ttsInitStatusLine ? String(ttsInitStatusLine.kokoroImportable) : 'pending'} · fallbackCode={ttsInitStatusLine?.fallbackCode ?? 'pending'}
+            tts init: providerSelected={ttsInitStatusLine?.providerSelected ?? 'pending'} · runtime={ttsInitStatusLine?.runtime ?? 'pending'} · dtype={ttsInitStatusLine?.dtype ?? 'pending'} · skipKokoroInit={String(ttsInitStatusLine?.skipKokoroInit ?? false)} · {SKIP_KOKORO_INIT_ON_PAGES_ENV_FLAG}={skipKokoroInitOnPagesEnvValue ?? 'undefined'} · kokoroImportable={ttsInitStatusLine ? String(ttsInitStatusLine.kokoroImportable) : 'pending'} · fallbackCode={ttsInitStatusLine?.fallbackCode ?? 'pending'} · mp3Ready={mp3Capability ? String(mp3Capability.available) : 'pending'}
           </p>
         ) : null}
       </header>
@@ -1258,6 +1266,15 @@ function App() {
         </div>
       ) : null}
 
+      {mp3Capability && !mp3Capability.available ? (
+        <div className="mb-4 rounded-md border border-amber-600 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+          MP3 export preflight warning: {mp3Capability.reason}
+          <p className="mt-1 text-xs text-amber-300">
+            code={mp3Capability.code}; detail={mp3Capability.technicalDetail ?? 'none'}
+          </p>
+        </div>
+      ) : null}
+
       {voiceFallbackWarning ? (
         <div className="mb-4 rounded-md border border-amber-600 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
           {voiceFallbackWarning}
@@ -1298,6 +1315,10 @@ function App() {
             <li>fallbackCode: {devTtsDiagnostics.fallbackCode ?? 'none'}</li>
             <li>fallbackReason: {devTtsDiagnostics.fallbackReason ?? 'none'}</li>
             <li>fallbackHint: {devTtsDiagnostics.fallbackHint ?? 'none'}</li>
+            <li>mp3Preflight.available: {String(devTtsDiagnostics.mp3Preflight.available)}</li>
+            <li>mp3Preflight.code: {devTtsDiagnostics.mp3Preflight.code}</li>
+            <li>mp3Preflight.reason: {devTtsDiagnostics.mp3Preflight.reason}</li>
+            <li>mp3Preflight.detail: {devTtsDiagnostics.mp3Preflight.technicalDetail ?? 'none'}</li>
           </ul>
         </aside>
       ) : null}
@@ -1642,7 +1663,7 @@ function App() {
                     : 'border-rose-700 bg-rose-950/40 text-rose-200'}`}
                 >
                   <p>
-                    {fullAudioBuild.status === 'ready' && fullAudioBuild.error === MP3_FALLBACK_WARNING
+                    {fullAudioBuild.status === 'ready' && fullAudioBuild.error.startsWith(MP3_FALLBACK_WARNING)
                       ? `Warning: ${fullAudioBuild.error}`
                       : fullAudioBuild.error}
                   </p>

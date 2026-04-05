@@ -12,22 +12,31 @@ describe('encodeMp3FromPcm', () => {
     vi.clearAllMocks();
   });
 
-  it('returns null when encoder constructor throws', async () => {
+  it('maps MPEGMode constructor failures to actionable diagnostics', async () => {
     vi.doMock('lamejs', () => ({
       default: {
         Mp3Encoder: class {
           constructor() {
-            throw new Error('constructor failed');
+            throw new Error('MPEGMode is not defined');
           }
         },
       },
     }));
 
-    const { encodeMp3FromPcm } = await import('./encodeMp3');
+    const { encodeMp3FromPcm, getLastMp3EncodingDiagnostic, probeMp3EncodingCapability } = await import('./encodeMp3');
+    expect(probeMp3EncodingCapability()).toMatchObject({
+      available: false,
+      code: 'encoder_init_failed',
+    });
+
     await expect(encodeMp3FromPcm(decodedAudio)).resolves.toBeNull();
+    expect(getLastMp3EncodingDiagnostic()).toMatchObject({
+      code: 'encoder_init_failed',
+      technicalDetail: 'MPEGMode is not defined',
+    });
   });
 
-  it('returns null when encodeBuffer throws at runtime', async () => {
+  it('returns null and captures runtime diagnostics when encodeBuffer throws', async () => {
     vi.doMock('lamejs', () => ({
       default: {
         Mp3Encoder: class {
@@ -42,7 +51,11 @@ describe('encodeMp3FromPcm', () => {
       },
     }));
 
-    const { encodeMp3FromPcm } = await import('./encodeMp3');
+    const { encodeMp3FromPcm, getLastMp3EncodingDiagnostic } = await import('./encodeMp3');
     await expect(encodeMp3FromPcm(decodedAudio)).resolves.toBeNull();
+    expect(getLastMp3EncodingDiagnostic()).toMatchObject({
+      code: 'encoder_runtime_failed',
+      technicalDetail: 'encode failed',
+    });
   });
 });

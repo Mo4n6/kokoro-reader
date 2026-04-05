@@ -36,6 +36,10 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('node_modules/kokoro-js') || id.includes('node_modules/@huggingface/transformers')) {
             return 'kokoro';
           }
+
+          if (id.includes('node_modules/lamejs')) {
+            return 'mp3-encoder';
+          }
         },
       },
     },

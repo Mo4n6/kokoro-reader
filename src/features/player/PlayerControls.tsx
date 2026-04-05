@@ -18,7 +18,6 @@ type PlayerControlsProps = {
   controlsHelperText?: string | null;
   onPlay: () => void;
   onPause: () => void;
-  onSeekSegmentStart: () => void;
   onVoiceChange: (voice: string) => void;
   onRateChange: (rate: number) => void;
   onManualRetry?: () => void;
@@ -54,7 +53,6 @@ export function PlayerControls({
   controlsHelperText = null,
   onPlay,
   onPause,
-  onSeekSegmentStart,
   onVoiceChange,
   onRateChange,
   onManualRetry,
@@ -193,15 +191,6 @@ export function PlayerControls({
         </button>
       </div>
 
-      <button
-        aria-label="Seek to current position start"
-        className="w-full rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-        onClick={onSeekSegmentStart}
-        type="button"
-      >
-        Restart Current Position
-      </button>
-
       {machineHint ? (
         <p className="rounded border border-amber-700 bg-amber-950/40 p-2 text-xs text-amber-200" role="status">
           {machineHint}
@@ -228,9 +217,6 @@ export function PlayerControls({
         </div>
       ) : null}
 
-      <p className="text-xs text-emerald-300/70">
-        Shortcuts: Space (play/pause), ArrowLeft/ArrowRight (skip), +/- (rate)
-      </p>
     </div>
   );
 }

@@ -56,12 +56,6 @@ class TTSSynthFailureError extends Error {
   }
 }
 
-type DowngradeTrigger = {
-  shouldDowngrade: boolean;
-  category?: 'validation' | 'runtime_exception';
-  reason?: string;
-};
-
 const loadKokoroModule = async (): Promise<KokoroModule> => {
   const module = await import('kokoro-js');
   return module as KokoroModule;
@@ -126,8 +120,8 @@ export class KokoroProvider implements TTSProvider {
 
   constructor(options: KokoroProviderOptions = {}) {
     this.modelRepo = options.modelRepo ?? DEFAULT_KOKORO_MODEL;
-    this.dtype = options.dtype ?? 'q8';
-    this.device = options.device ?? 'wasm';
+    this.dtype = options.dtype ?? 'fp32';
+    this.device = options.device ?? 'webgpu';
     this.validateStartupOptions();
   }
 
@@ -152,25 +146,7 @@ export class KokoroProvider implements TTSProvider {
   }
 
   async synthesize(segment: TTSSegment, options: TTSSynthesisOptions = {}): Promise<TTSSynthesisResult> {
-    try {
-      return await this.synthesizeWithEngine(await this.getEngine(), segment, options);
-    } catch (error) {
-      const downgradeTrigger = this.getDowngradeTrigger(error);
-      if (!downgradeTrigger.shouldDowngrade) {
-        throw error;
-      }
-
-      perfTelemetry.sink.log({
-        type: 'tts.runtime_downgrade',
-        transition: 'webgpu->wasm',
-        reason: downgradeTrigger.reason ?? 'synthesis_validation_failed',
-        triggerCategory: downgradeTrigger.category ?? 'validation',
-        segmentId: segment.id,
-      });
-
-      const wasmEngine = await this.getWasmFallbackEngine();
-      return this.synthesizeWithEngine(wasmEngine, segment, options);
-    }
+    return this.synthesizeWithEngine(await this.getEngine(), segment, options);
   }
 
   async synthesizeWithRuntime(
@@ -258,84 +234,6 @@ export class KokoroProvider implements TTSProvider {
       blob,
       url: URL.createObjectURL(blob),
     };
-  }
-
-  private getDowngradeTrigger(error: unknown): DowngradeTrigger {
-    if (this.getRuntimeDevice() !== 'webgpu') {
-      return { shouldDowngrade: false };
-    }
-
-    if (this.device !== 'webgpu') {
-      return { shouldDowngrade: false };
-    }
-
-    if (!(error instanceof Error)) {
-      return { shouldDowngrade: false };
-    }
-
-    if (error.message.startsWith('KOKORO_AUDIO_INVALID:') || (error as { code?: string }).code === 'tts.synth_failure') {
-      return {
-        shouldDowngrade: true,
-        category: 'validation',
-        reason: this.toDowngradeReason(error),
-      };
-    }
-
-    const runtimeReason = this.toRuntimeDowngradeReason(error);
-    if (runtimeReason) {
-      return {
-        shouldDowngrade: true,
-        category: 'runtime_exception',
-        reason: runtimeReason,
-      };
-    }
-
-    return { shouldDowngrade: false };
-  }
-
-  private toDowngradeReason(error: unknown): string {
-    if (error instanceof Error && error.message.startsWith('KOKORO_AUDIO_INVALID:')) {
-      return error.message.replace('KOKORO_AUDIO_INVALID:', '').trim();
-    }
-
-    return 'synthesis_validation_failed';
-  }
-
-  private toRuntimeDowngradeReason(error: Error): string | undefined {
-    const errorCode = (error as { code?: string }).code?.toLowerCase() ?? '';
-    const errorName = error.name.toLowerCase();
-    const normalizedMessage = error.message.toLowerCase();
-    const combined = `${errorName} ${errorCode} ${normalizedMessage}`;
-
-    if (combined.includes('device lost') || combined.includes('devicelost')) {
-      return 'runtime_device_lost';
-    }
-
-    if (combined.includes('adapter reset') || combined.includes('adapterreset')) {
-      return 'runtime_adapter_reset';
-    }
-
-    if (
-      combined.includes('out of memory')
-      || combined.includes('out-of-memory')
-      || combined.includes('oom')
-      || combined.includes('memory allocation failed')
-      || combined.includes('insufficient memory')
-    ) {
-      return 'runtime_oom';
-    }
-
-    if (
-      combined.includes('backend error')
-      || combined.includes('backenderror')
-      || combined.includes('internal backend')
-      || combined.includes('wgpu')
-      || combined.includes('dawn')
-    ) {
-      return 'runtime_backend_error';
-    }
-
-    return undefined;
   }
 
   private getWasmFallbackEngine(): Promise<KokoroEngine> {

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { PlayerMachineState } from './playerMachine';
-import type { PlaybackMode } from '../../domain/segments';
 
 type PlayerControlsProps = {
   queueStatus: PlayerMachineState;
@@ -11,7 +10,6 @@ type PlayerControlsProps = {
   voice: string;
   voices: Array<{ id: string; name: string; language?: string; provider: string }>;
   rate: number;
-  playbackMode: PlaybackMode;
   isVoiceReadyForPlayback?: boolean;
   voiceReadinessHelperText?: string | null;
   playDisabled?: boolean;
@@ -20,12 +18,9 @@ type PlayerControlsProps = {
   controlsHelperText?: string | null;
   onPlay: () => void;
   onPause: () => void;
-  onPrevSegment: () => void;
-  onNextSegment: () => void;
   onSeekSegmentStart: () => void;
   onVoiceChange: (voice: string) => void;
   onRateChange: (rate: number) => void;
-  onPlaybackModeChange: (mode: PlaybackMode) => void;
   onManualRetry?: () => void;
 };
 
@@ -51,7 +46,6 @@ export function PlayerControls({
   voice,
   voices,
   rate,
-  playbackMode,
   isVoiceReadyForPlayback = true,
   voiceReadinessHelperText = null,
   playDisabled = false,
@@ -60,12 +54,9 @@ export function PlayerControls({
   controlsHelperText = null,
   onPlay,
   onPause,
-  onPrevSegment,
-  onNextSegment,
   onSeekSegmentStart,
   onVoiceChange,
   onRateChange,
-  onPlaybackModeChange,
   onManualRetry,
 }: PlayerControlsProps) {
   const [liveMessage, setLiveMessage] = useState('Playback idle.');
@@ -82,7 +73,7 @@ export function PlayerControls({
 
     const progressRatio = (currentSegmentIndex + 1) / segmentCount;
     return `${Math.round(Math.min(1, Math.max(0, progressRatio)) * 100)}%`;
-  }, [currentSegmentIndex, playbackMode, progressTextOverride, segmentCount]);
+  }, [currentSegmentIndex, progressTextOverride, segmentCount]);
 
   useEffect(() => {
     const statusLabel = queueStatus === 'playing' ? 'Playback started.' : `Playback ${queueStatus}.`;
@@ -109,35 +100,13 @@ export function PlayerControls({
         return;
       }
 
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        onPrevSegment();
-        return;
-      }
-
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        onNextSegment();
-        return;
-      }
-
-      if (event.key === '+' || event.key === '=') {
-        event.preventDefault();
-        onRateChange(Math.min(RATE_MAX, Number((rate + RATE_STEP).toFixed(1))));
-        return;
-      }
-
-      if (event.key === '-') {
-        event.preventDefault();
-        onRateChange(Math.max(RATE_MIN, Number((rate - RATE_STEP).toFixed(1))));
-      }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [canPlay, isPlaying, onNextSegment, onPause, onPlay, onPrevSegment, onRateChange, rate]);
+  }, [canPlay, isPlaying, onPause, onPlay]);
 
   return (
     <div className="mt-3 space-y-3" aria-label="Player controls">
@@ -192,20 +161,6 @@ export function PlayerControls({
         onChange={(event) => onRateChange(Number(event.target.value))}
       />
 
-      <label className="block text-sm text-emerald-200/90" htmlFor="playback-mode-control">
-        Playback mode
-      </label>
-      <select
-        id="playback-mode-control"
-        aria-label="Playback mode"
-        className="w-full rounded-md border border-emerald-500/30 bg-[#0a160f] p-2 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-        value={playbackMode}
-        onChange={(event) => onPlaybackModeChange(event.target.value as PlaybackMode)}
-      >
-        <option value="segmented">Step-by-step</option>
-        <option value="continuous">Continuous</option>
-      </select>
-
       <div
         className="rounded-md border border-emerald-500/30 bg-[#0a160f] p-3 text-sm"
         aria-live="polite"
@@ -217,15 +172,7 @@ export function PlayerControls({
         <p>{progressLabel}: {progressText}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <button
-          aria-label="Skip to previous position"
-          className="rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-          onClick={onPrevSegment}
-          type="button"
-        >
-          ◀ Prev
-        </button>
+      <div className="grid grid-cols-1 gap-2">
         <button
           aria-label={isPlaying ? 'Pause playback' : 'Play playback'}
           className="rounded-md border border-emerald-400 bg-emerald-500/15 px-2 py-1 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
@@ -243,14 +190,6 @@ export function PlayerControls({
           type="button"
         >
           {isPlaying ? 'Pause' : 'Play'}
-        </button>
-        <button
-          aria-label="Skip to next position"
-          className="rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-          onClick={onNextSegment}
-          type="button"
-        >
-          Next ▶
         </button>
       </div>
 

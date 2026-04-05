@@ -2,7 +2,7 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from '
 import { ttsManifest } from './licenses/ttsManifest';
 import { ingestInput } from './features/ingest/urlAdapter';
 import { PlayerControls } from './features/player/PlayerControls';
-import type { NormalizedDocument, PlaybackMode, SpeakableSegment } from './domain/segments';
+import type { NormalizedDocument, SpeakableSegment } from './domain/segments';
 import { usePlayerController } from './features/player/playerMachine';
 import { clearWebGpuUnstableProfileForCurrentBrowser, selectTTSProvider } from './tts/providerSelector';
 import { perfTelemetry, setupLocalDebugPerfTelemetry } from './tts/perfTelemetry';
@@ -11,7 +11,6 @@ import type { TTSFallbackError } from './tts/errors';
 import { canImportKokoroModule } from './tts/providers/kokoroProvider';
 import { WebSpeechProvider } from './tts/providers/webSpeechProvider';
 import type { KokoroDType, RuntimeDType, TTSProvider, TTSVoice } from './tts/types';
-import { chunkSegmentsByPolicy, defaultChunkingPolicy, getChunkPieceSeparator } from './domain/chunking/policy';
 import { buildFullAudioExport, type ExportFormat } from './tts/buildFullAudioExport';
 import { MP3_FALLBACK_WARNING, probeMp3EncodingCapability, type Mp3CapabilityProbe } from './tts/encodeMp3';
 import { PreviewPanel } from './features/preview/PreviewPanel';
@@ -21,12 +20,6 @@ import {
   SYNTHESIS_RETRY_MAX_ATTEMPTS,
   synthesizeWithValidation,
 } from './tts/synthesizeWithValidation';
-
-type PlaybackAnchor = {
-  segmentId: string;
-  playbackSegmentIndex: number;
-  playbackCharOffset: number;
-};
 
 function normalizeFingerprintText(text: string): string {
   return text.normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -46,50 +39,6 @@ function buildDocumentFingerprint(segments: SpeakableSegment[]): string {
     `${segment.id}:${hashFingerprintValue(normalizeFingerprintText(segment.text))}`
   ));
   return `${segments.length}:${hashFingerprintValue(normalizedParts.join('|'))}`;
-}
-
-function shouldDefaultContinuousMode(segments: SpeakableSegment[]): boolean {
-  if (!segments.length) {
-    return false;
-  }
-
-  return segments.every((segment) => segment.kind === 'text' || segment.kind === 'markdown');
-}
-
-function buildContinuousPlayback(segments: SpeakableSegment[]): {
-  playbackSegments: Array<{ id: string; text: string }>;
-  seekAnchors: PlaybackAnchor[];
-} {
-  const chunkedSegments = chunkSegmentsByPolicy(segments, defaultChunkingPolicy);
-  const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
-  const playbackSegments = chunkedSegments.map(({ id, text }) => ({ id, text }));
-
-  const seekAnchors: PlaybackAnchor[] = [];
-
-  chunkedSegments.forEach((chunk, playbackSegmentIndex) => {
-    let runningOffset = 0;
-    let previousPiece: (typeof chunk.pieces)[number] | undefined;
-
-    chunk.pieces.forEach((piece) => {
-      if (previousPiece) {
-        const previousSegment = segmentById.get(previousPiece.segmentId);
-        const currentSegment = segmentById.get(piece.segmentId);
-        if (currentSegment) {
-          runningOffset += getChunkPieceSeparator(previousSegment, currentSegment, defaultChunkingPolicy).length;
-        }
-      }
-
-      seekAnchors.push({
-        segmentId: piece.segmentId,
-        playbackSegmentIndex,
-        playbackCharOffset: runningOffset,
-      });
-      runningOffset += piece.text.length;
-      previousPiece = piece;
-    });
-  });
-
-  return { playbackSegments, seekAnchors };
 }
 
 
@@ -293,12 +242,12 @@ const AUDIO_REPLAY_EPSILON_SECONDS = 0.05;
 
 const loadStoredKokoroDtype = (): KokoroDType | 'auto' => {
   if (typeof window === 'undefined') {
-    return 'auto';
+    return 'fp32';
   }
 
   const stored = window.localStorage.getItem(TTS_DTYPE_STORAGE_KEY);
   if (!stored || stored === 'auto') {
-    return 'auto';
+    return 'fp32';
   }
 
   return KOKORO_DTYPE_OPTIONS.includes(stored as KokoroDType) ? (stored as KokoroDType) : 'auto';
@@ -430,7 +379,6 @@ function App() {
   const [voice, setVoice] = useState(storedPreferences?.voice ?? '');
   const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>([]);
   const [rate, setRate] = useState(storedPreferences?.rate ?? 1);
-  const [playbackModeOverride, setPlaybackModeOverride] = useState<PlaybackMode | null>(null);
   const [showModelLicenseInfo, setShowModelLicenseInfo] = useState(false);
   const [selectedKokoroDtype, setSelectedKokoroDtype] = useState<KokoroDType | 'auto'>(loadStoredKokoroDtype);
   const [runtimeWarnings, setRuntimeWarnings] = useState<PerfDebugEntry[]>([]);
@@ -463,18 +411,9 @@ function App() {
     hasPendingVoiceMigrationNormalization && !hasCompletedVoiceMigration
   );
 
-  const defaultPlaybackMode = useMemo<PlaybackMode>(() => (
-    shouldDefaultContinuousMode(ingested.document.segments) ? 'continuous' : 'segmented'
-  ), [ingested.document.segments]);
-  const playbackMode = playbackModeOverride ?? defaultPlaybackMode;
-
   const filteredVoices = availableVoices;
 
   const playbackData = useMemo(() => {
-    if (playbackMode === 'continuous') {
-      return buildContinuousPlayback(ingested.document.segments);
-    }
-
     return {
       playbackSegments: ingested.document.segments.map((segment) => ({ id: segment.id, text: segment.text })),
       seekAnchors: ingested.document.segments.map((segment, index) => ({
@@ -483,7 +422,7 @@ function App() {
         playbackCharOffset: 0,
       })),
     };
-  }, [ingested.document.segments, playbackMode]);
+  }, [ingested.document.segments]);
 
   const documentFingerprint = useMemo(
     () => buildDocumentFingerprint(ingested.document.segments),
@@ -533,19 +472,6 @@ function App() {
     const mins = Math.floor(clampedSeconds / 60);
     const secs = clampedSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }, []);
-
-  const seekExportPreviewBy = useCallback((deltaSeconds: number) => {
-    const audioElement = fullAudioElementRef.current;
-    if (!audioElement) {
-      return;
-    }
-
-    const targetTime = Math.min(
-      Number.isFinite(audioElement.duration) ? audioElement.duration : Number.POSITIVE_INFINITY,
-      Math.max(0, audioElement.currentTime + deltaSeconds),
-    );
-    audioElement.currentTime = targetTime;
   }, []);
 
   const syncExportPreviewStateFromAudio = useCallback((audioElement: HTMLAudioElement) => {
@@ -847,42 +773,12 @@ function App() {
 
   const initializeProvider = useCallback(async (activeCheck: () => boolean) => {
     const skipKokoroInit = isPagesStyleBase && shouldSkipKokoroInitOnPages;
-  
-    // ────── FULL GREMLIN OVERRIDE SYSTEM v2 ──────
-    const urlParams = typeof window !== 'undefined' 
-      ? new URLSearchParams(window.location.search) 
-      : new URLSearchParams();
-  
-    const forcedFromUrl = urlParams.get('ttsDevice') || urlParams.get('device');
-    const forceWebGpu = urlParams.get('forceWebGpu') === 'true' || forcedFromUrl === 'webgpu';
-    const forceWasm   = urlParams.get('forceWasm') === 'true'   || forcedFromUrl === 'wasm';
-  
-    // This is the line that was causing the "Cannot find name 'forcedDeviceOverride'" error
-    const preferredDevice: 'webgpu' | 'wasm' | undefined =
-      forceWebGpu ? 'webgpu' :
-      forceWasm   ? 'wasm' :
-      getDevDeviceOverride() ?? undefined;
-  
-    const skipAllQualityChecks = forceWebGpu || 
-      urlParams.get('skipQuality') === 'true' || 
-      urlParams.get('skipWebGpuQualityCheck') === 'true';
-  
-    const allowUnstable = forceWebGpu || 
-      urlParams.get('allowUnstable') === 'true';
-  
-    console.log('🚀 GREMLIN TTS INIT OVERRIDE:', { 
-      preferredDevice, 
-      skipAllQualityChecks, 
-      allowUnstable,
-      rawUrlParams: Object.fromEntries(urlParams.entries())
-    });
-  
+
     const selectedProvider = await selectTTSProvider({
-      preferredDevice,                    // now correctly typed
-      allowWebGpuIfUnstable: allowUnstable,
-      skipWebGpuQualityCheck: skipAllQualityChecks,
+      preferredDevice: 'webgpu',
+      allowWebGpuIfUnstable: true,
+      skipWebGpuQualityCheck: true,
       kokoro: selectedKokoroDtype === 'auto' ? undefined : { dtype: selectedKokoroDtype },
-  
       skipKokoroInit,
       skipKokoroInitReason: skipKokoroInit
         ? 'GitHub Pages MVP mode: Kokoro init skipped intentionally while bundling is being finalized.'
@@ -905,7 +801,7 @@ function App() {
       });
     }
   
-    if (forceWebGpu && activeCheck()) {
+    if (activeCheck()) {
       setForceWebGpuRetry(false);
     }
   
@@ -1307,15 +1203,6 @@ function App() {
         </div>
       ) : null}
 
-      {mp3Capability && !mp3Capability.available ? (
-        <div className="mb-4 rounded-md border border-amber-600 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-          MP3 export preflight warning: {mp3Capability.reason}
-          <p className="mt-1 text-xs text-amber-300">
-            code={mp3Capability.code}; detail={mp3Capability.technicalDetail ?? 'none'}
-          </p>
-        </div>
-      ) : null}
-
       {voiceFallbackWarning ? (
         <div className="mb-4 rounded-md border border-amber-600 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
           {voiceFallbackWarning}
@@ -1477,7 +1364,7 @@ function App() {
           <PreviewPanel
             segments={ingested.document.segments}
             currentSegmentIndex={player.currentSegmentIndex}
-            isContinuousMode={playbackMode === 'continuous'}
+            isContinuousMode={false}
           />
           <div className="mt-2 space-y-2">
             {ingested.warnings.map((warning) => (
@@ -1502,7 +1389,6 @@ function App() {
                   setProviderInitNonce((current) => current + 1);
                 }}
               >
-                <option value="auto">Auto (default)</option>
                 {KOKORO_DTYPE_OPTIONS.map((dtypeOption) => (
                   <option key={dtypeOption} value={dtypeOption}>{dtypeOption}</option>
                 ))}
@@ -1514,7 +1400,6 @@ function App() {
                 : player.state}
               currentSegmentIndex={playbackSource === 'exported' ? 0 : player.currentSegmentIndex}
               segmentCount={playbackData.playbackSegments.length}
-              playbackMode={playbackMode}
               machineError={playbackSource === 'exported' ? null : player.error}
               machineHint={playbackSource === 'exported' ? null : player.hint}
               voice={voice}
@@ -1541,8 +1426,10 @@ function App() {
                   playExportedAudio();
                   return;
                 }
-
-                void player.play();
+                clearWebGpuUnstableProfileForCurrentBrowser();
+                setForceWebGpuRetry(true);
+                setProviderInitNonce((current) => current + 1);
+                void player.retryCurrentSegment();
               }}
               onPause={() => {
                 if (playbackSource === 'exported') {
@@ -1550,20 +1437,6 @@ function App() {
                   return;
                 }
                 player.pause();
-              }}
-              onPrevSegment={() => {
-                if (playbackSource === 'exported') {
-                  seekExportPreviewBy(-10);
-                  return;
-                }
-                void player.skipPrevious();
-              }}
-              onNextSegment={() => {
-                if (playbackSource === 'exported') {
-                  seekExportPreviewBy(10);
-                  return;
-                }
-                void player.skipNext();
               }}
               onSeekSegmentStart={() => {
                 if (playbackSource === 'exported') {
@@ -1576,7 +1449,6 @@ function App() {
               }}
               onVoiceChange={setVoice}
               onRateChange={setRate}
-              onPlaybackModeChange={setPlaybackModeOverride}
               onManualRetry={() => {
                 void player.retryCurrentSegment();
               }}
@@ -1611,7 +1483,6 @@ function App() {
                   value={exportFormat}
                 >
                   <option value="wav">WAV (default)</option>
-                  <option value="mp3">MP3</option>
                 </select>
               </label>
               <div className="mt-2 flex gap-2">

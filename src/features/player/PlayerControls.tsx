@@ -10,8 +10,6 @@ type PlayerControlsProps = {
   machineHint?: string | null;
   voice: string;
   voices: Array<{ id: string; name: string; language?: string; provider: string }>;
-  selectedLanguage: string;
-  languageOptions: Array<{ value: string; label: string }>;
   rate: number;
   playbackMode: PlaybackMode;
   isVoiceReadyForPlayback?: boolean;
@@ -26,7 +24,6 @@ type PlayerControlsProps = {
   onNextSegment: () => void;
   onSeekSegmentStart: () => void;
   onVoiceChange: (voice: string) => void;
-  onLanguageChange: (language: string) => void;
   onRateChange: (rate: number) => void;
   onPlaybackModeChange: (mode: PlaybackMode) => void;
   onManualRetry?: () => void;
@@ -53,8 +50,6 @@ export function PlayerControls({
   machineHint = null,
   voice,
   voices,
-  selectedLanguage,
-  languageOptions,
   rate,
   playbackMode,
   isVoiceReadyForPlayback = true,
@@ -69,7 +64,6 @@ export function PlayerControls({
   onNextSegment,
   onSeekSegmentStart,
   onVoiceChange,
-  onLanguageChange,
   onRateChange,
   onPlaybackModeChange,
   onManualRetry,
@@ -83,15 +77,11 @@ export function PlayerControls({
     }
 
     if (segmentCount === 0) {
-      return playbackMode === 'continuous' ? '0%' : '0 / 0';
+      return '0%';
     }
 
-    if (playbackMode === 'continuous') {
-      const progressRatio = (currentSegmentIndex + 1) / segmentCount;
-      return `${Math.round(Math.min(1, Math.max(0, progressRatio)) * 100)}%`;
-    }
-
-    return `${currentSegmentIndex + 1} / ${segmentCount}`;
+    const progressRatio = (currentSegmentIndex + 1) / segmentCount;
+    return `${Math.round(Math.min(1, Math.max(0, progressRatio)) * 100)}%`;
   }, [currentSegmentIndex, playbackMode, progressTextOverride, segmentCount]);
 
   useEffect(() => {
@@ -158,22 +148,6 @@ export function PlayerControls({
       <label className="block text-sm text-emerald-200/90" htmlFor="voice-picker">
         Voice selector
       </label>
-      <label className="block text-sm text-emerald-200/90" htmlFor="language-picker">
-        Language selector
-      </label>
-      <select
-        id="language-picker"
-        aria-label="Language selector"
-        className="w-full rounded-md border border-emerald-500/30 bg-[#0a160f] p-2 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-        value={selectedLanguage}
-        onChange={(event) => onLanguageChange(event.target.value)}
-      >
-        {languageOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
       <select
         id="voice-picker"
         aria-label="Voice selector"

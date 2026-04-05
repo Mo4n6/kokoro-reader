@@ -177,6 +177,21 @@ export interface UsePlayerControllerResult {
   retryCurrentSegment: () => Promise<void>;
 }
 
+function findNextPlaybackAnchorIndex(
+  anchors: PlayerSeekAnchor[],
+  currentAnchorIndex: number,
+  currentPlaybackSegmentIndex: number,
+): number | null {
+  for (let index = currentAnchorIndex + 1; index < anchors.length; index += 1) {
+    const candidate = anchors[index];
+    if (candidate && candidate.playbackSegmentIndex > currentPlaybackSegmentIndex) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
 function delayMs(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -566,8 +581,8 @@ export function usePlayerController({
         dispatch({ type: 'SET_CHAR_OFFSET', charOffset: segment.text.length });
 
         void (async () => {
-          const nextIndex = boundedIndex + 1;
-          if (nextIndex >= anchors.length) {
+          const nextIndex = findNextPlaybackAnchorIndex(anchors, boundedIndex, playbackIndex);
+          if (nextIndex == null) {
             dispatch({ type: 'SET_STATE', state: 'finished' });
             persistCursor(boundedIndex, Math.max(0, segment.text.length - boundedAnchor.playbackCharOffset));
             transitioningRef.current = false;
@@ -644,8 +659,8 @@ export function usePlayerController({
       transitioningRef.current = true;
 
       void (async () => {
-        const nextIndex = boundedIndex + 1;
-        if (nextIndex >= anchors.length) {
+        const nextIndex = findNextPlaybackAnchorIndex(anchors, boundedIndex, playbackIndex);
+        if (nextIndex == null) {
           dispatch({ type: 'SET_STATE', state: 'finished' });
           persistCursor(boundedIndex, Math.max(0, segment.text.length - boundedAnchor.playbackCharOffset));
           transitioningRef.current = false;

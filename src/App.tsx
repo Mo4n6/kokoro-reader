@@ -135,50 +135,6 @@ const getDefaultKokoroVoice = (voices: TTSVoice[]): TTSVoice | undefined => (
   voices.find((providerVoice) => providerVoice.id === 'af_alloy') ?? voices[0]
 );
 
-const normalizeLanguageTag = (language?: string): string => (
-  (language ?? '').trim().toLowerCase()
-);
-
-const getLanguageRoot = (language?: string): string => {
-  const normalized = normalizeLanguageTag(language);
-  return normalized.split(/[-_]/)[0] ?? '';
-};
-
-const isVoiceLanguageMatch = (voiceLanguage: string | undefined, targetLanguage: string): boolean => {
-  const normalizedTarget = normalizeLanguageTag(targetLanguage);
-  if (!normalizedTarget) {
-    return false;
-  }
-
-  const normalizedVoiceLanguage = normalizeLanguageTag(voiceLanguage);
-  if (!normalizedVoiceLanguage) {
-    return false;
-  }
-
-  return (
-    normalizedVoiceLanguage === normalizedTarget
-    || getLanguageRoot(normalizedVoiceLanguage) === getLanguageRoot(normalizedTarget)
-  );
-};
-
-const getEnglishVoices = (voices: TTSVoice[]): TTSVoice[] => voices.filter((providerVoice) => (
-  isVoiceLanguageMatch(providerVoice.language, 'en')
-));
-
-const getPreferredVoicesForLanguage = (voices: TTSVoice[], language: string): TTSVoice[] => {
-  const languageMatches = voices.filter((providerVoice) => isVoiceLanguageMatch(providerVoice.language, language));
-  if (languageMatches.length > 0) {
-    return languageMatches;
-  }
-
-  const englishVoices = getEnglishVoices(voices);
-  if (englishVoices.length > 0) {
-    return englishVoices;
-  }
-
-  return voices;
-};
-
 const getWebSpeechVoiceIds = (): string[] => {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return [];
@@ -431,7 +387,6 @@ function App() {
   const [showDetails, setShowDetails] = useState(!isProduction);
   const [voice, setVoice] = useState(storedPreferences?.voice ?? '');
   const [availableVoices, setAvailableVoices] = useState<TTSVoice[]>([]);
-  const [selectedVoiceLanguage, setSelectedVoiceLanguage] = useState('auto');
   const [rate, setRate] = useState(storedPreferences?.rate ?? 1);
   const [playbackModeOverride, setPlaybackModeOverride] = useState<PlaybackMode | null>(null);
   const [showModelLicenseInfo, setShowModelLicenseInfo] = useState(false);
@@ -468,39 +423,7 @@ function App() {
   ), [ingested.document.segments]);
   const playbackMode = playbackModeOverride ?? defaultPlaybackMode;
 
-  const languageOptions = useMemo<Array<{ value: string; label: string }>>(() => {
-    const distinctLanguages = Array.from(
-      new Set(
-        availableVoices
-          .map((providerVoice) => normalizeLanguageTag(providerVoice.language))
-          .filter((language) => language.length > 0),
-      ),
-    ).sort((a, b) => a.localeCompare(b));
-
-    return [
-      { value: 'auto', label: 'Auto' },
-      ...distinctLanguages.map((language) => ({ value: language, label: language })),
-    ];
-  }, [availableVoices]);
-
-  const effectiveVoiceLanguage = useMemo(() => {
-    if (selectedVoiceLanguage !== 'auto') {
-      return selectedVoiceLanguage;
-    }
-
-    const selectedVoice = availableVoices.find((providerVoice) => providerVoice.id === voice);
-    const selectedVoiceLanguageTag = normalizeLanguageTag(selectedVoice?.language);
-    if (selectedVoiceLanguageTag) {
-      return selectedVoiceLanguageTag;
-    }
-
-    const defaultLanguage = normalizeLanguageTag(availableVoices[0]?.language);
-    return defaultLanguage || 'en';
-  }, [availableVoices, selectedVoiceLanguage, voice]);
-
-  const filteredVoices = useMemo(() => (
-    getPreferredVoicesForLanguage(availableVoices, effectiveVoiceLanguage)
-  ), [availableVoices, effectiveVoiceLanguage]);
+  const filteredVoices = availableVoices;
 
   const playbackData = useMemo(() => {
     if (playbackMode === 'continuous') {
@@ -591,58 +514,68 @@ function App() {
       fileName: `${toFileNameStem(ingested.title)}.${exportFormat}`,
     });
 
-    const blobs: Blob[] = [];
-    for (let index = 0; index < totalSegments; index += 1) {
-      const segment = playbackData.playbackSegments[index];
-      const result = await provider.synthesize(segment, { voice, rate });
-      if (!('blob' in result)) {
+    try {
+      const blobs: Blob[] = [];
+      for (let index = 0; index < totalSegments; index += 1) {
+        const segment = playbackData.playbackSegments[index];
+        const result = await provider.synthesize(segment, { voice, rate });
+        if (!('blob' in result)) {
+          setFullAudioBuild((current) => ({
+            ...current,
+            status: 'error',
+            error: 'Current voice/runtime only supports live native speech playback. Try a Kokoro voice for downloadable audio.',
+          }));
+          return null;
+        }
+        blobs.push(result.blob);
+        setFullAudioBuild((current) => ({
+          ...current,
+          builtSegments: index + 1,
+        }));
+      }
+
+      if (!blobs.length) {
         setFullAudioBuild((current) => ({
           ...current,
           status: 'error',
-          error: 'Current voice/runtime only supports live native speech playback. Try a Kokoro voice for downloadable audio.',
+          error: 'Synthesis returned empty audio content.',
         }));
         return null;
       }
-      blobs.push(result.blob);
+
+      const wavBlob = await concatAudioBlobs(blobs);
+      let exportedBlob = wavBlob;
+      let exportError: string | null = null;
+
+      if (exportFormat === 'mp3') {
+        const decodedPcm = await concatAudioBlobsToPcm(blobs);
+        const mp3Blob = await encodeMp3FromPcm(decodedPcm);
+        if (!mp3Blob) {
+          exportError = 'MP3 export is unavailable in this runtime. Downloading WAV instead.';
+        } else {
+          exportedBlob = mp3Blob;
+        }
+      }
+
+      const audioUrl = URL.createObjectURL(exportedBlob);
       setFullAudioBuild((current) => ({
         ...current,
-        builtSegments: index + 1,
+        status: 'ready',
+        audioUrl,
+        builtSegments: totalSegments,
+        fileName: `${toFileNameStem(ingested.title)}.${exportedBlob.type === 'audio/mpeg' ? 'mp3' : 'wav'}`,
+        error: exportError,
       }));
-    }
-
-    if (!blobs.length) {
+      return audioUrl;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       setFullAudioBuild((current) => ({
         ...current,
         status: 'error',
-        error: 'Synthesis returned empty audio content.',
+        error: `Build failed: ${message}`,
       }));
       return null;
     }
-
-    const wavBlob = await concatAudioBlobs(blobs);
-    let exportedBlob = wavBlob;
-    let exportError: string | null = null;
-
-    if (exportFormat === 'mp3') {
-      const decodedPcm = await concatAudioBlobsToPcm(blobs);
-      const mp3Blob = await encodeMp3FromPcm(decodedPcm);
-      if (!mp3Blob) {
-        exportError = 'MP3 export is unavailable in this runtime. Downloading WAV instead.';
-      } else {
-        exportedBlob = mp3Blob;
-      }
-    }
-
-    const audioUrl = URL.createObjectURL(exportedBlob);
-    setFullAudioBuild((current) => ({
-      ...current,
-      status: 'ready',
-      audioUrl,
-      builtSegments: totalSegments,
-      fileName: `${toFileNameStem(ingested.title)}.${exportedBlob.type === 'audio/mpeg' ? 'mp3' : 'wav'}`,
-      error: exportError,
-    }));
-    return audioUrl;
   }, [clearFullAudioBuild, exportFormat, ingested.title, playbackData.playbackSegments, provider, rate, voice]);
 
   useEffect(() => {
@@ -887,10 +820,7 @@ function App() {
         const normalizedSelectedVoice = providerLabel === 'kokoro'
           ? normalizeKokoroVoiceId(selectedVoice)
           : selectedVoice;
-        const preferredVoicesForEffectiveLanguage = getPreferredVoicesForLanguage(voices, effectiveVoiceLanguage);
-        const fallbackVoices = preferredVoicesForEffectiveLanguage.length > 0
-          ? preferredVoicesForEffectiveLanguage
-          : voices;
+        const fallbackVoices = voices;
         const isSelectedVoiceAvailable = fallbackVoices.some((providerVoice) => providerVoice.id === normalizedSelectedVoice);
         if (isSelectedVoiceAvailable) {
           if (normalizedSelectedVoice !== selectedVoice) {
@@ -947,7 +877,6 @@ function App() {
       active = false;
     };
   }, [
-    effectiveVoiceLanguage,
     hasCompletedVoiceMigration,
     hasPendingVoiceMigrationNormalization,
     provider,
@@ -1334,7 +1263,7 @@ function App() {
 
         <article className="rounded-xl border border-emerald-500/35 bg-[#07110a] p-4 shadow-lg shadow-black/20">
           <h2 className="text-lg font-semibold">Preview panel</h2>
-          <p className="mt-2 text-sm text-emerald-300/70">Normalized segments: {ingested.document.segments.length}</p>
+          <p className="mt-2 text-sm text-emerald-300/70">Normalized content is ready for preview.</p>
           <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
             {ingested.document.segments.map((segment, index) => (
               <div
@@ -1393,8 +1322,6 @@ function App() {
               machineHint={playbackSource === 'exported' ? null : player.hint}
               voice={voice}
               voices={filteredVoices}
-              selectedLanguage={selectedVoiceLanguage}
-              languageOptions={languageOptions}
               rate={rate}
               isVoiceReadyForPlayback={isVoiceReadyForPlayback}
               voiceReadinessHelperText={voiceReadinessHelperText}
@@ -1462,7 +1389,6 @@ function App() {
                 void player.seekSegment(player.currentSegmentIndex, 0);
               }}
               onVoiceChange={setVoice}
-              onLanguageChange={setSelectedVoiceLanguage}
               onRateChange={setRate}
               onPlaybackModeChange={setPlaybackModeOverride}
               onManualRetry={() => {
@@ -1585,7 +1511,9 @@ function App() {
                 value={fullAudioBuild.builtSegments}
               />
               <p className="mt-1 text-xs text-emerald-300/70">
-                {fullAudioBuild.builtSegments} / {fullAudioBuild.totalSegments || playbackData.playbackSegments.length} segments
+                Build progress: {Math.round(
+                  (fullAudioBuild.builtSegments / Math.max(fullAudioBuild.totalSegments || playbackData.playbackSegments.length, 1)) * 100,
+                )}%
               </p>
               {fullAudioBuild.error ? (
                 <p className="mt-2 rounded border border-rose-700 bg-rose-950/40 p-2 text-xs text-rose-200">{fullAudioBuild.error}</p>

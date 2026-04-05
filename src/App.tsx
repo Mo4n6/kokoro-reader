@@ -1438,36 +1438,12 @@ function App() {
                 }
                 player.pause();
               }}
-              onSeekSegmentStart={() => {
-                if (playbackSource === 'exported') {
-                  if (fullAudioElementRef.current) {
-                    fullAudioElementRef.current.currentTime = 0;
-                  }
-                  return;
-                }
-                void player.seekSegment(player.currentSegmentIndex, 0);
-              }}
               onVoiceChange={setVoice}
               onRateChange={setRate}
               onManualRetry={() => {
                 void player.retryCurrentSegment();
               }}
             />
-            <button
-              aria-label="Reset playback queue"
-              className="w-full rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-              onClick={() => {
-                if (playbackSource === 'exported' && fullAudioElementRef.current) {
-                  fullAudioElementRef.current.currentTime = 0;
-                  fullAudioElementRef.current.pause();
-                  return;
-                }
-                void player.seekSegment(0, 0);
-              }}
-              type="button"
-            >
-              Reset Queue
-            </button>
             <div className="rounded-md border border-emerald-500/30 bg-[#0a160f] p-3 text-sm">
               <p className="font-semibold text-emerald-100">Full audio export</p>
               <p className="mt-1 text-xs text-emerald-300/80">

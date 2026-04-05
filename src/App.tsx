@@ -1458,9 +1458,15 @@ function App() {
                   }}
                   value={exportFormat}
                 >
-                  <option value="wav">WAV (default)</option>
+                  <option value="wav">WAV</option>
+                  <option value="mp3" disabled={!mp3Capability?.available}>MP3</option>
                 </select>
               </label>
+              {!mp3Capability?.available ? (
+                <p className="mt-1 text-xs text-amber-300/90">
+                  MP3 export is unavailable in this browser/runtime. WAV export will still work.
+                </p>
+              ) : null}
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
@@ -1482,24 +1488,15 @@ function App() {
                           : 'border-emerald-500/40 bg-[#07110a] text-emerald-100'
                       }`}
                       onClick={() => {
+                        if (playbackSource === 'exported') {
+                          fullAudioElementRef.current?.pause();
+                          setPlaybackSource('stream');
+                          return;
+                        }
                         setPlaybackSource('exported');
                       }}
                     >
-                      Use export preview controls
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded-md border px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                        playbackSource === 'stream'
-                          ? 'border-emerald-300 bg-emerald-500/20 text-emerald-100'
-                          : 'border-emerald-500/40 bg-[#07110a] text-emerald-100'
-                      }`}
-                      onClick={() => {
-                        fullAudioElementRef.current?.pause();
-                        setPlaybackSource('stream');
-                      }}
-                    >
-                      Use stream controls
+                      {playbackSource === 'exported' ? 'Using export controls (switch to stream)' : 'Using stream controls (switch to export)'}
                     </button>
                     <a
                       className="rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 text-emerald-100 hover:border-emerald-300/70"
@@ -1508,16 +1505,6 @@ function App() {
                     >
                       Download
                     </a>
-                    <button
-                      type="button"
-                      className="rounded-md border border-emerald-500/40 bg-[#07110a] px-2 py-1 text-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                      onClick={() => {
-                        setPlaybackSource('exported');
-                        playExportedAudio();
-                      }}
-                    >
-                      Play exported audio
-                    </button>
                     <audio
                       ref={fullAudioElementRef}
                       className="sr-only"

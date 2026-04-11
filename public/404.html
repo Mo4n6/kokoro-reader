@@ -7,7 +7,18 @@
       (function redirectToSpaEntry(location) {
         var path = location.pathname + location.search + location.hash;
         var normalizedPath = path.replace(/&/g, '~and~');
-        location.replace('/?/' + normalizedPath.replace(/^\//, ''));
+        var segments = location.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+        var basePath = '/';
+
+        if (segments.length > 0) {
+          if (segments[0] === 'tools' && segments.length > 1) {
+            basePath = '/' + segments[0] + '/' + segments[1] + '/';
+          } else {
+            basePath = '/' + segments[0] + '/';
+          }
+        }
+
+        location.replace(basePath + '?/' + normalizedPath.replace(/^\//, ''));
       }(window.location));
     </script>
   </head>

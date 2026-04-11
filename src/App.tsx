@@ -71,12 +71,9 @@ function readUrlBase64Bootstrap(): UrlBase64Bootstrap {
     return { text: null, error: null, paramKey: null };
   }
 
-  const hashQueryIndex = window.location.hash.indexOf('?');
-  const hashQuery = hashQueryIndex >= 0 ? window.location.hash.slice(hashQueryIndex + 1) : '';
   const params = new URLSearchParams(window.location.search);
-  const hashParams = new URLSearchParams(hashQuery);
   for (const paramKey of URL_BASE64_TEXT_PARAM_KEYS) {
-    const encodedValue = params.get(paramKey) ?? hashParams.get(paramKey);
+    const encodedValue = params.get(paramKey);
     if (typeof encodedValue !== 'string') {
       continue;
     }
@@ -1196,9 +1193,6 @@ function App() {
             </p>
             <p className="mt-1">
               When present, the app decodes the text, loads it into the paste field, and starts playback automatically using the current default voice/rate settings.
-            </p>
-            <p className="mt-1 text-emerald-300/80">
-              Works with pretty paths and hash-route query strings (for example <code>/tools/momoro-reader?b64=...</code> or <code>/tools/?b64=...#/momoro-reader</code>).
             </p>
           </div>
         ) : null}
